@@ -1,0 +1,264 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Soundness: Kaleidoscope</title>
+        <meta charset="utf-8" />
+        <link rel="stylesheet" href="/styles.css" />
+        <link rel="icon" type="image/x-icon" href="/images/logo2.svg" />
+    </head>
+    <body>
+        <nav>
+            <ul>
+                <li><a href="/">home</a></li>
+                <li>
+                    <a href="https://github.com/propensive/soundness"
+                        >contribute</a
+                    >
+                </li>
+                <li>
+                    <a href="https://discord.com/invite/MBUrkTgMnA">discuss</a>
+                </li>
+            </ul>
+        </nav>
+        <main>
+            <h2>Kaleidoscope</h2>
+            <p class="intro">
+                Statically-checked inline pattern matching on regular
+                expressions
+            </p>
+            <h3>About</h3>
+            <p>
+                <img
+                    src="https://github.com/propensive/kaleidoscope/raw/main/doc/logo.svg"
+                />
+                Kaleidoscope is a small library to make pattern matching against
+                strings more pleasant. Regular expressions can be written
+                directly in patterns, and capturing groups bound directly to
+                variables, typed according to the group's repetition. Here is an
+                example:
+            </p>
+            <pre>
+case class Email(user: Text, domain: Text)
+
+email match
+  case r"$user([^@]+)@$domain(.*)" => Email(name, domain)</pre
+            >
+            <p>
+                Strings are widely used to carry complex data, when it's wiser
+                to use structured objects. Kaleidoscope makes it easier to move
+                away from strings.
+            </p>
+            <h3>Features</h3>
+            <ul>
+                <li>pattern match strings against regular expressions</li>
+                <li>
+                    regular expressions can be written inline in patterns,
+                    anywhere a string could match
+                </li>
+                <li>direct extraction of capturing groups in patterns</li>
+                <li>
+                    typed extraction (into <code>List</code>s or
+                    <a href="https://github.com/propensive/vacuous/">Vacuous</a>
+                    <code>Optional</code>s) of variable-length capturing groups
+                </li>
+                <li>static checking of regular expression syntax</li>
+                <li>simpler "glob" syntax is also provided</li>
+            </ul>
+            <h3>Availability</h3>
+            <p>
+                Kaleidoscope is available as a binary for Scala 3.4.0 and later,
+                from <a href="https://central.sonatype.com">Maven Central</a>.
+                To include it in an <code>sbt</code> build, use the coordinates:
+            </p>
+            <pre>
+libraryDependencies += "dev.soundness" % "kaleidoscope-core" % "0.1.0"</pre
+            >
+            <h3>Getting Started</h3>
+            <p>
+                Kaleidoscope is included in the
+                <code>kaleidoscope</code> package, and exported to the
+                <code>soundness</code> package.
+            </p>
+
+            <p>To use Kaleidoscope alone, you can include the import,</p>
+            <pre>
+import kaleidoscope.*
+</pre
+            >
+            <p>or to use it with other Soundness libraries, include:</p>
+            <pre>
+import soundness.*
+</pre
+            >
+
+            <section>
+                <p>
+                    Note that Kaleidoscope uses the <code>Text</code> type from
+                    <a href="https://github.com/propensive/anticipation"
+                        >Anticipation</a
+                    >
+                    and the <code>Optional</code> type from
+                    <a href="https://github.com/propensive/vacuous/">Vacuous</a
+                    >. These offer some advantages, but they can be easily
+                    converted: <code>Text#s</code> converts a
+                    <code>Text</code> to a <code>String</code> and
+                    <code>Optional#option</code> converts an
+                    <code>Optional</code> value to its equivalent
+                    <code>Option</code>. The necessary imports are show in the
+                    examples.
+                </p>
+            </section>
+
+            <p>
+                You can then use a Kaleidoscope regular expression—a string
+                prefixed with the letter <code>r</code>—anywhere you can pattern
+                match against a string in Scala. For example,
+            </p>
+            <pre>
+import anticipation.Text
+
+def describe(path: Text): Unit =
+  path match
+    case r"/images/.*" => println("image")
+    case r"/styles/.*" => println("stylesheet")
+    case _             => println("something else")
+</pre
+            >
+            <p>or,</p>
+            <pre>
+import vacuous.{Optional, Unset}
+
+def validate(email: Text): Optional[Text] = email match
+  case r"^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,6}$$" => email
+  case _                                            => Unset
+</pre
+            >
+
+            <p>
+                Such patterns will either match or not, however should they
+                match, it is possible to extract parts of the matched string
+                using capturing groups. The pattern syntax is exactly as
+                described in the
+                <a
+                    href="https://docs.oracle.com/javase/7/docs/api/java/util/regex/Pattern.html"
+                    >Java Standard Library</a
+                >, with the exception that a capturing group (enclosed within
+                <code>(</code> and <code>)</code>) may be bound to an identifier
+                by placing it, like an interpolated string substitution,
+                immediately prior to the capturing group, as
+                <code>$identifier</code> or <code>${identifier}</code>.
+            </p>
+
+            <p>
+                Here is an example of using a pattern match against filenames:
+            </p>
+            <pre>
+enum FileType:
+  case Image(text: Text)
+  case Stylesheet(text: Text)
+
+def identify(path: Text): FileType = path match
+  case r"/images/${img}(.*)"  => FileType.Image(img)
+  case r"/styles/$styles(.*)" => FileType.Stylesheet(styles)
+</pre
+            >
+
+            <p>
+                Alternatively, as with patterns in general, this can be
+                extracted directly in a <code>val</code> definition.
+            </p>
+
+            <p>Here is an example of matching an email address:</p>
+            <pre>
+val r"^[a-z0-9._%+-]+@$domain([a-z0-9.-]+\.$tld([a-z]{2,6}))$$" =
+  "test@example.com": @unchecked
+</pre
+            >
+
+            <p>
+                The <code>@unchecked</code> annotation ascribed to the result is
+                standard Scala, and acknowledges to the compiler that the match
+                is <em>partial</em> and may fail at runtime.
+            </p>
+
+            <p>
+                If you try this example in the Scala REPL, it would bind the
+                following values:
+            </p>
+            <pre>
+> domain: Text = t"example.com"
+> tld: Text = t"com"
+</pre
+            >
+
+            <p>
+                In addition, the syntax of the regular expression will be
+                checked at compile-time, and any issues will be reported then.
+            </p>
+
+            <h3>Repeated and optional capture groups</h3>
+
+            <p>
+                A normal, <em>unitary</em> capturing group, like
+                <code>domain</code> and <code>tld</code> above, will extract
+                into <code>Text</code> values. But if a capturing group has a
+                repetition suffix, such as <code>*</code> or <code>+</code>,
+                then the extracted type will be a <code>List[Text]</code>. This
+                also applies to repetition ranges, such as <code>{3}</code>,
+                <code>{2,}</code> or <code>{1,9}</code>.
+            </p>
+
+            <p>
+                Note that <code>{1}</code> will still extract a
+                <code>Text</code> value. The type is determined statically from
+                the pattern, and not dynamically from the runtime scrutinee.
+            </p>
+
+            <p>
+                A capture group may be marked as optional, meaning it can appear
+                either zero or one times. This will extract a value with the
+                type <code>Optional[Text]</code>; that is, if it present it will
+                be a <code>Text</code> value, and if not, it will be
+                <code>Unset</code>.
+            </p>
+
+            <p>
+                For example, see how <code>init</code> is extracted as a
+                <code>List[Text]</code>, below:
+            </p>
+            <pre>
+import gossamer.{drop, Rtl}
+
+def parseList(): List[Text] = "parsley, sage, rosemary, and thyme" match
+  case r"$only([a-z]+)"                      => List(only)
+  case r"$first([a-z]+) and $second([a-z]+)" => List(first, second)
+  case r"$init([a-z]+, )*and $last([a-z]+)"  => init.map(_.drop(2, Rtl)) :+ last</pre
+            >
+            <h3>Escaping</h3>
+            <p>
+                Note that inside an extractor pattern string, whether it is
+                single- (<code>r"..."</code>) or triple-quoted
+                (<code>r"""..."""</code>), special characters, notably
+                <code>\</code>, do not need to be escaped, with the exception of
+                <code>$</code> which should be written as <code>$$</code>.
+            </p>
+            <p>
+                It is still necessary, however, to follow the regular expression
+                escaping rules, for example, an extractor matching a single
+                opening parenthesis would be written as <code>r"\("</code> or
+                <code>r"""\("""</code>.
+            </p>
+            <h3>Globs</h3>
+            <p>
+                Globs offer a simplified and limited form of regular expression.
+                You can use these in exactly the same way as a standard regular
+                expresion, using the <code>g"..."</code> interpolator instead.
+            </p>
+            <h3>License</h3>
+            <p>
+                Kaleidoscope is copyright &copy; 2024 Jon Pretty & Propensive
+                O&Uuml;, and is made available under the Apache 2.0 License.
+            </p>
+        </main>
+    </body>
+</html>

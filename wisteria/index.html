@@ -1,0 +1,1273 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Soundness: Wisteria</title>
+        <meta charset="utf-8" />
+        <link rel="stylesheet" href="/styles.css" />
+        <link rel="icon" type="image/x-icon" href="/images/logo2.svg" />
+    </head>
+    <body>
+        <nav>
+            <ul>
+                <li><a href="/">home</a></li>
+                <li>
+                    <a href="https://github.com/propensive/soundness"
+                        >contribute</a
+                    >
+                </li>
+                <li>
+                    <a href="https://discord.com/invite/MBUrkTgMnA">discuss</a>
+                </li>
+            </ul>
+        </nav>
+        <main>
+            <h2>Wisteria</h2>
+
+            <p class="intro">
+                Simple, fast and transparant generic derivation for typeclasses
+            </p>
+
+            <h3>About</h3>
+            <p>
+                <img
+                    src="https://github.com/propensive/wisteria/raw/main/doc/logo.svg"
+                />
+                <b>Wisteria</b> is a generic macro for automatic materialization
+                of typeclasses for datatypes composed from product types (e.g.
+                case classes) and coproduct types (e.g. enums). It supports
+                recursively-defined datatypes out-of-the-box, and incurs no
+                significant time-penalty during compilation.
+            </p>
+
+            <h3>Features</h3>
+            <ul>
+                <li>
+                    derives typeclasses for case classes, case objects, sealed
+                    traits and enumerations
+                </li>
+                <li>
+                    offers a lightweight but typesafe syntax for writing
+                    derivations avoiding complex macro code
+                </li>
+                <li>builds upon Scala 3's built-in generic derivation</li>
+                <li>works with recursive and mutually-recursive definitions</li>
+                <li>
+                    supports parameterized ADTs (GADTs), including those in
+                    recursive types
+                </li>
+                <li>
+                    supports both consumer and producer typeclass interfaces
+                </li>
+                <li>fast at compiletime</li>
+                <li>
+                    generates performant runtime code, without unnecessary
+                    runtime allocations
+                </li>
+            </ul>
+
+            <h3>Availability</h3>
+            <p>
+                Wisteria is available as a binary for Scala 3.4.0 and later,
+                from <a href="https://central.sonatype.com">Maven Central</a>.
+                To include it in an <code>sbt</code> build, use the coordinates:
+            </p>
+            <pre>
+libraryDependencies += "dev.soundness" % "wisteria-core" % "0.2.0"
+</pre
+            >
+
+            <h3>Getting Started</h3>
+
+            <p>
+                Wisteria makes it easy to derive typeclass instances for product
+                and sum types, by defining the rules for composition and
+                delegation as simply as possible.
+            </p>
+
+            <p>
+                This is called <em>generic derivation</em>, and given a
+                typeclass which provides some functionality on a type, it makes
+                it possible to automatically extend that typeclass's
+                functionality to all product types, so long as it is available
+                for each of the product's fields; and optionally, to extend that
+                typeclass's functionality to all sum types, so long as it is
+                available for each of the sum's variants.
+            </p>
+
+            <p>
+                In other words, if we know how to do something to each field in
+                a product, then we can do the same thing to the product itself;
+                or if we can do something to each variant of a sum, then we can
+                do the same thing to the sum itself.
+            </p>
+
+            <h3>Terminology</h3>
+
+            <h4>Sums and Products</h4>
+
+            <p>
+                In this documentation, and in Wisteria, we use the term
+                <em>product</em> for types which are composed of a specific
+                sequence of zero or more values of other types. Products include
+                case classes, enumeration cases, tuples and singleton types, and
+                the values from which they are composed are called
+                <em>fields</em>. The fields for any given product have fixed
+                types, appear in a canonical order and are labelled, though for
+                tuples, the labels only indicate the field's position.
+                Singletons have no fields.
+            </p>
+
+            <p>
+                Likewise, we use the term <em>sum</em> for types which represent
+                a single choice from a specific and fixed set of disjoint types.
+                Sum types include enumerations and sealed traits. Each of the
+                disjoint types that together form a sum type is called a
+                <em>variant</em> of the sum.
+            </p>
+
+            <p>
+                From a category-theoretical perspective, products and sums are
+                each others' duals, and thus fields and variants are duals.
+            </p>
+
+            <p>In the following example,</p>
+            <pre>
+sealed trait Temporal
+
+enum Month:
+  case Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec
+
+case class Date(day: Int, month: Month, year: Int) extends Temporal
+case class Time(hour: Int, minute: Int)
+case class DateTime(date: Date, time: Time) extends Temporal
+</pre
+            >
+            <p>we can say the following:</p>
+            <ul>
+                <li><code>Temporal</code> is a sum type</li>
+                <li>
+                    <code>Date</code> and <code>DateTime</code> are variants of
+                    <code>Temporal</code>
+                </li>
+                <li>
+                    <code>Date</code>, <code>Time</code> and
+                    <code>DateTime</code> are all product types
+                </li>
+                <li>
+                    <code>day</code>, <code>month</code> and
+                    <code>year</code> are fields of <code>Date</code>
+                </li>
+                <li>
+                    <code>hour</code> and <code>minute</code> are fields of
+                    <code>Time</code>
+                </li>
+                <li>
+                    <code>date</code> and <code>time</code> are fields of
+                    <code>DateTime</code>
+                </li>
+                <li><code>Month</code> is a sum type</li>
+                <li>
+                    <code>Jan</code> through to <code>Dec</code> are all product
+                    types, all singletons, and all variants of
+                    <code>Month</code>
+                </li>
+                <li>
+                    the type, <code>(Month, Int)</code> (representing a month
+                    and a year) would be a product type, and a tuple
+                </li>
+            </ul>
+
+            <h4>Typeclasses</h4>
+
+            <p>
+                A typeclass is a type (usually defined as a trait), whose
+                instances provide some functionality, through different
+                implementations of an abstract method on the typeclass,
+                corresponding to different types which are specified in one of
+                the typeclass's type parameters. Instances are provided as
+                contextual values (<code>given</code>s), requested when needed
+                through <code>using</code> parameters, and resolved through
+                contextual search (implicit search) at the callsite.
+            </p>
+
+            <p>
+                Where necessary, we distinguish clearly between a typeclass
+                <em>interface</em> (the generic trait and abstract method) and a
+                typeclass <em>instance</em> (a <code>given</code> definition
+                which implements the aforesaid trait). The term
+                <em>typeclass</em> alone refers to the typeclass interface.
+            </p>
+
+            <p>
+                The exact structure of a typeclass interface varies greatly, but
+                typically, a typeclass is a trait, with a single type parameter,
+                and a single abstract method, where the type parameter appears
+                either in the method's return type or in one or more of its
+                parameters.
+            </p>
+
+            <p>
+                We call typeclasses whose type parameter appears in their
+                abstract method's return type <em>producers</em>, because they
+                produce new instances of the parameter type. Typeclasses whose
+                type parameter appears in their abstract method's parameters,
+                <em>consumers</em> because existing instances of the parameter
+                type are given to them. (The term <em>consumer</em> shouldn't be
+                misinterpreted to imply that any value is "used up" in applying
+                the typeclass's functionality; it will be passed into a method,
+                but will continue to exist for as long as references to it
+                continue to exist.)
+            </p>
+
+            <p>
+                Producers may be covariant (indicated by a <code>+</code> before
+                their type parameter), and consumers may be contravariant
+                (indicated by a <code>-</code> before their type parameter). But
+                either can be defined as invariant.
+            </p>
+
+            <p>For example,</p>
+            <pre>
+trait Size[ValueType]:
+  def size(value: ValueType): Double
+</pre
+            >
+            <p>
+                is an invariant consumer typeclass interface for getting a
+                representation (as a double) of the size of an instance of
+                <code>ValueType</code>. It might have instances defined as:
+            </p>
+            <pre>
+object Size:
+  given Size[Boolean] = new Size[Boolean]:
+    def size(value: Boolean): Double = 1.0
+
+  given Size[Char] with
+    def size(value: Char): Double = 2.0
+
+  given Size[String] = _.length.toDouble
+</pre
+            >
+            <p>and even,</p>
+            <pre>
+given [ElementType](using size: Size[ElementType]): Size[List[ElementType]] =
+  _.map(size.size(_)).sum
+</pre
+            >
+            <p>
+                which constructs new typeclass instances for <code>List</code>s
+                on-demand, and which requires a typeclass instance corresponding
+                to the type of the <code>List</code>'s elements. Since
+                <code>Size</code> is a single-abstract-method (SAM) type, it can
+                be implemented as a simple lambda corresponding to the abstract
+                method.
+            </p>
+            <p>Another typeclass example would be,</p>
+            <pre>
+trait Default[+ValueType]:
+  def apply(): ValueType
+</pre
+            >
+            <p>which is a covariant producer typeclass interface.</p>
+
+            <h3>Derivation</h3>
+
+            <p>
+                Wisteria lets us say, for a <em>particular</em> typeclass
+                interface but for <em>any</em> product type, "if we have
+                instances of the typeclass available for every field, then we
+                can construct a typeclass instance for that product type", and
+                provides the means to specify how they should be combined.
+            </p>
+
+            <p>
+                Dually, we can say that, for a <em>particular</em> typeclass
+                instance but for <em>any</em> sum type, "if we have instances of
+                the typeclass available for every variant of the sum, then we
+                can construct a typeclass instance for that sum type", and
+                provides the means to specify how the instances should be
+                combined.
+            </p>
+
+            <p>
+                Naturally, fields and variants may themselves be products or
+                sums, so generic derivation may be applied recursively.
+            </p>
+
+            <p>
+                Hence, if we define all our datatypes out of products and sum
+                types of "simple" types, then for a particular typeclass
+                interface, we can define typeclass instances for the simple
+                types plus a generic derivation mechanism, and typeclass
+                instances will effectively be available for every datatype.
+            </p>
+
+            <p>
+                Generic derivation for sum types is not always needed or even
+                desirable, so we will start by exploring product derivation.
+            </p>
+
+            <h3>Deriving Products</h3>
+
+            <h4>Consumer Typeclasses</h4>
+
+            <p>
+                A typical example of a consumer typeclass is the
+                <code>Show</code> typeclass. It provides the functionality to
+                take a value, and produce a string representation of that value,
+                and could be defined as,
+            </p>
+            <pre>
+trait Show[ValueType]:
+  def show(value: ValueType): Text
+</pre
+            >
+            <p>
+                with an extension method to make it easier to apply the
+                typeclass:
+            </p>
+            <pre>
+extension [ValueType: Show](value: ValueType)
+  def show: Text = summon[Show[ValueType]].show(value)
+</pre
+            >
+
+            <p>
+                Generalizing over all products (and hence, all possible field
+                types), our task is to define <em>how</em> a product type should
+                be shown, if we're provided with the means to show each of its
+                fields.
+            </p>
+
+            <p>
+                So, if we have <code>Show</code> instances for <code>Int</code>s
+                and <code>Text</code>s, then we want to be able to derive a
+                <code>Show</code> instance for a type such as:
+            </p>
+
+            <pre>
+case class Person(name: Text, age: Int)
+</pre
+            >
+
+            <p>
+                However, in the general case, we do not know how many fields
+                there will be or what their types are, so we cannot rely on any
+                of these details in our generic derivation definition.
+            </p>
+
+            <p>
+                To use Wisteria, we need to import the
+                <code>wisteria</code> package,
+            </p>
+            <pre>
+import wisteria.*
+</pre
+            >
+            <p>
+                and add the <code>ProductDerivation</code> trait to the
+                companion object of the type we want to define generic
+                derivation for, along with the stub for the
+                <code>join</code> method, like so:
+            </p>
+            <pre>
+object Show extends ProductDerivation[Show]:
+  inline def join[DerivationType <: Product: ProductReflection]: Show[DerivationType] = ???
+</pre
+            >
+
+            <p>
+                The signature of <code>join</code> must be defined exactly like
+                this:
+            </p>
+            <ul>
+                <li>it must be <code>inline</code></li>
+                <li>
+                    its type parameter must be a subtype of <code>Product</code>
+                </li>
+                <li>
+                    it must have a context bound on
+                    <code>ProductReflection</code>
+                </li>
+                <li>
+                    its return type must be an instance of the typeclass,
+                    parameterized on the method's type parameter
+                </li>
+            </ul>
+
+            <p>
+                Given the return type, we know that we need to construct a new
+                <code>Show[DerivationType]</code> instance, so we can start with
+                the definition,
+            </p>
+            <pre>
+object Show extends ProductDerivation[Show]:
+  inline def join[DerivationType <: Product: ProductReflection]: Show[DerivationType] =
+    new Show[DerivationType]:
+      def show(value: DerivationType): Text = ???
+</pre
+            >
+
+            <p>
+                We will implement <code>show</code> by calling the method
+                <code>fields</code>, which is available as a protected method
+                inside <code>ProductDerivation</code>, and which allows us to
+                map over each field in the product to produce an array of
+                values, by means of a polymorphic lambda.
+                <code>fields</code> also takes an instance of the product type,
+                so it can provide the actual field value from the product inside
+                the lambda.
+            </p>
+
+            <p>Here's what a call to <code>fields</code> looks like:</p>
+            <pre>
+object Show extends ProductDerivation[Show]:
+  inline def join[DerivationType <: Product: ProductReflection]: Show[DerivationType] =
+    new Show[DerivationType]:
+      def show(value: DerivationType): Text =
+        val array: IArray[Nothing] = fields(value):
+          [FieldType] => field =>
+            ???
+
+        ???
+</pre
+            >
+
+            <p>
+                The polymorphic lambda may be unfamiliar syntax, but it can be
+                thought of as equivalent to as a lambda equivalent of a
+                polymorphic method. So if the lambda for,
+            </p>
+            <pre>
+def transform(field: Field): Text
+</pre
+            >
+            <p>is, <code>Field => Text</code>, then the lambda for,</p>
+            <pre>
+def transform[FieldType](field: FieldType): Text
+</pre
+            >
+            <p>is, <code>[FieldType] => FieldType => Text</code>.</p>
+
+            <p>
+                This is necessary because each field will potentially have a
+                different type, but in the context of the
+                <code>fields</code> method, we know nothing about what these
+                types are, but it <em>is</em> useful to be able to name the
+                type. The lambda variable, <code>field</code>, has the type
+                <code>FieldType</code>.
+            </p>
+
+            <p>
+                Although we can refer to <code>field</code>'s type as
+                <code>FieldType</code> in the lambda body, we still have almost
+                no information at all about the properties of this type. The one
+                thing we can assert, however, is that another occurrence of
+                <code>FieldType</code> is at least referring to the
+                <em>same</em> type.
+            </p>
+
+            <p>
+                Therefore, an instance of <code>Show[FieldType]</code>,
+                regardless of where it comes from, <em>will</em> be able to show
+                an instance of <code>FieldType</code>.
+            </p>
+
+            <p>
+                By default, Wisteria will make just such an instance available
+                contextually within the lambda body.
+            </p>
+            <pre>
+[FieldType] => field =>
+  summon[Show[FieldType]].show(field)
+</pre
+            >
+
+            <p>
+                So, for each field this lambda is invoked on, a
+                <code>Show[Int]</code>, <code>Show[Text]</code> or
+                <code>Show[Person]</code> (or whatever type necessary) is
+                summoned and supplied to it contextually as a
+                <code>Show[FieldType]</code>. It's also available contextually
+                by name as <code>context</code>, so we can also write,
+            </p>
+            <pre>
+[FieldType] => field =>
+  context.show(field)
+</pre
+            >
+            <p>
+                but since it's contextual we can use the extension method above,
+                and so it is sufficient to write,
+                <code>[FieldType] => field => field.show</code>.
+            </p>
+
+            <p>
+                This gives us enough to construct an array of
+                <code>Text</code> values corresponding to each field in a
+                product, which we can join together:
+            </p>
+            <pre>
+object Show extends ProductDerivation[Show]:
+  inline def join[DerivationType <: Product: ProductReflection]: Show[DerivationType] =
+    new Show[DerivationType]:
+      def show(value: DerivationType): Text =
+        val array: IArray[Text] = fields(value):
+          [FieldType] => field =>
+            field.show
+
+        array.join(t"[", t", ", t"]")
+</pre
+            >
+
+            <p>
+                This definiton is sufficient to generate new (and working)
+                contextual instances of <code>Show</code> for product types.
+                Given the definition of <code>Person</code> above,
+                <code>Person(t"George", 19).show</code> would produce the
+                string, <code>[George, 19]</code>.
+            </p>
+
+            <p>
+                Similar to the <code>fields</code> method, another method,
+                <code>contexts</code>, is provided for accessing the typeclasses
+                corresponding to each field, without using a preexisting
+                instance of the derivation type for dereferencing.
+            </p>
+
+            <h4>Labels</h4>
+
+            <p>
+                This is close to what we need, but we would also like to include
+                the type name. This is available as a protected method of
+                <code>ProductDerivation</code> called, <code>typeName</code>, so
+                we can adjust the last line to,
+                <code>array.join(t"$typeName[", t", ", t"]")</code>, and our new
+                derivation will produce the string,
+                <code>Person[George, 19]</code>.
+            </p>
+
+            <p>
+                But we can go further. The name of each field can also be
+                included in the string output. The value <code>label</code> is
+                provided as a named contextual value inside
+                <code>fields</code>'s lambda, so we can access the label for any
+                field from within the lambda. Changing the definition to,
+            </p>
+            <pre>
+[FieldsType] => field =>
+  t"$label:${field.show}"
+</pre
+            >
+            <p>
+                will change the output to
+                <code>Person[name:George, age:19]</code>.
+            </p>
+
+            <h4>Special Product types</h4>
+
+            <p>
+                We might also like to provide different behavior for certain
+                kinds of product type; singletons and tuples. Singletons have no
+                fields, so the brackets could be omitted for these products. And
+                tuples' names are not so meaningful, so these could be omitted.
+            </p>
+
+            <p>
+                Two methods returning boolean values, <code>singleton</code> and
+                <code>tuple</code> can be used to determine whether the current
+                product type is a singleton or a tuple. The implementation of
+                <code>join</code> can be adapted to provide different strings in
+                these cases.
+            </p>
+
+            <h4>Full Example</h4>
+
+            <p>
+                Since <code>Show</code> is a SAM type, we can also simplify the
+                implementation and write the implementation of
+                <code>join</code> as a lambda. A full implementation would look
+                like this:
+            </p>
+            <pre>
+object Show extends ProductDerivation[Show]:
+  inline def join[DerivationType <: Product: ProductReflection]: Show[DerivationType] = value =>
+    if singleton then typeName else
+      fields(value):
+        [FieldType] => field => if tuple then field.show else t"$label=$field"
+      .join(if tuple then t"[" else t"$typeName[", t", ", t"]")
+  </pre
+            >
+
+            <h4>Complementary Values</h4>
+
+            <p>
+                Some typeclasses operate on two values of the same type. An
+                example is the <code>Eq</code> typeclass for determining
+                structural equality of two values:
+            </p>
+            <pre>
+trait Eq[ValueType]:
+  def equal(left: ValueType, right: ValueType): Boolean
+</pre
+            >
+
+            <p>
+                When defining the <code>join</code> method for <code>Eq</code>,
+                we could use the <code>fields</code> method to map over the
+                fields of either <code>left</code> or <code>right</code>, but
+                not both.
+            </p>
+
+            <p>
+                One solution would be to construct arrays of the field values of
+                <code>left</code>, the field values of <code>right</code> and
+                the <code>Eq</code> typeclasses corresponding to each field.
+                (Although the field values, and hence their corresponding
+                typeclass instances will be different from each other, the types
+                of the elements of the left and right arrays will at least be
+                pairwise-compatible.) We could then iterate over the three
+                arrays together, applying the each typeclass to its
+                corresponding left and right field value, and then aggregating
+                the results.
+            </p>
+
+            <p>
+                While possible, this would be inefficient and would rquire a
+                significant compromise of typesafety: inside the lambda, a value
+                and a typeclass will be typed according to
+                <code>FieldType</code>, and therefore uniquely compatible with
+                each other. But as soon as they are aggregated into an array,
+                independent of each other, their types would become
+                incompatible, erased to <code>Any</code> or
+                <code>Nothing</code>, and could only be combined with explicit
+                <code>asInstanceOf</code> casts.
+            </p>
+
+            <p>
+                Wisteria avoids this by making it possible, within the
+                <code>fields</code> lambda of one product value, to access the
+                field value, from another product value, which corresponds to
+                the field in the current lambda, using the
+                <code>complement</code> method, and to provide it with the same
+                type so that it is compatible with that field's contextual
+                typeclass instance.
+            </p>
+
+            <p>Here's a full implementation of <code>Eq</code>:</p>
+            <pre>
+object Eq extends ProductDerivation[Eq]:
+  inline def join[DerivationType <: Product: ProductReflection]: Eq[DerivationType] =
+    (left, right) =>
+      fields(left):
+        [FieldType] => leftField =>
+          context.eq(leftField, complement(right))
+      .foldLeft(true)(_ && _)
+</pre
+            >
+
+            <h4>Producer Product Typeclasses</h4>
+
+            <p>
+                Producer typeclasses can also be generically derived. Wheras a
+                <em>consumer typeclass</em> will receive a pre-existing instance
+                of the derivation type as input, and produce a value of some
+                invariant type, a <em>producer typeclass</em> will take an
+                invariant type as input, and will construct a new instance of
+                the derivation type.
+            </p>
+
+            <p>
+                An example of a producer typeclass would be a simple
+                <code>Random</code> typeclass which takes a long "seed" value as
+                input and constructs a random new instance from that seed. A
+                <code>Random</code> instance for a generic product type should
+                produce a new product instance, all of whose field values are
+                chosen randomly.
+            </p>
+
+            <p>Here is the definition of <code>Random</code>:</p>
+            <pre>
+trait Random[+ValueType]:
+  def next(seed: Long): ValueType
+</pre
+            >
+
+            <p>
+                For a producer typeclass derivation, The
+                <code>join</code> signature will be identical, but instead of
+                the <code>fields</code> method, we will need to use the
+                <code>construct</code> method to construct a new instance,
+                without taking an existing instance of the product type as
+                input. A call to <code>fields</code> will also take a
+                polymorphic lambda specifying the field type, but since we have
+                no preexisting instance, and therefore no fields, its lambda
+                variable is a reference to the typeclass instance which can be
+                used to instantiate the new field value.
+            </p>
+
+            <pre>
+object Random extends ProductDerivation[Random]:
+  inline def join[DerivationType <: Product: ProductReflection]: Random[DerivationType] = seed =>
+    construct:
+      [FieldType] => random =>
+        ???
+</pre
+            >
+
+            <p>
+                In fact, since we know nothing about the type of the field in
+                the context of the lambda (except that we have a name for it),
+                the typeclass instance, which shares the same type in its
+                parameter, is our <em>only</em> means of constructing a new
+                instance for that field.
+            </p>
+
+            <p>
+                Therefore, by parametricity, the only sensible way to implement
+                the method is to invoke the <code>next</code> method, like so:
+            </p>
+            <pre>
+object Random extends ProductDerivation[Random]:
+  inline def join[DerivationType <: Product: ProductReflection]: Random[DerivationType] = seed =>
+    construct:
+      [FieldType] => random => random.next(seed)
+</pre
+            >
+
+            <p>
+                Calling <code>constuct</code>, specifying how each field's value
+                will be computed, will return a new instance of the product,
+                <code>DerivationType</code>. Since <code>Random</code> is a SAM
+                type, this expression of
+                <code>Long => DerivationType</code> provides a suitable
+                implementation for the new typeclass.
+            </p>
+
+            <h3>Deriving Sum Types</h3>
+
+            <p>
+                Deriving sums, or coproducts, is possible by making a choice of
+                which of their variants is represented by the sum type. Deriving
+                sums may be omitted for many typeclasses, since it's not as
+                commonly useful as deriving products. But if it is desired in
+                addition to product derivation, a typeclass's companion object
+                will need to extend <code>Derivation</code> instead of
+                <code>ProductDerivation</code>, and define an additional
+                <code>split</code> method.
+            </p>
+
+            <p>
+                Here are the adjusted stub implementations for the
+                <code>Show</code> typeclass:
+            </p>
+            <pre>
+object Show extends Derivation[Show]:
+  inline def join[DerivationType <: Product: ProductReflection]: Show[DerivationType] = ???
+  inline def split[DerivationType: SumReflection]: Show[DerivationType] = ???
+</pre
+            >
+
+            <p>
+                Note that <code>split</code>'s signature is similar to
+                <code>join</code>'s, but lacks the subtype constraint on
+                <code>DerivationType</code> and uses a
+                <code>SumReflection[DerivationType]</code> instead of a
+                <code>ProductReflection</code>. An implementation of
+                <code>split</code> will have some similarities with a
+                <code>join</code> implementation, but will use
+                <code>variant</code> and <code>delegate</code> methods instead
+                of <code>fields</code> and <code>construct</code>.
+            </p>
+
+            <h4>Consumer Sum Types</h4>
+
+            <p>
+                To show an instance of a typeclass, we will use the
+                <code>variant</code> method to inspect a preexisting instance of
+                the derivation type and apply a lambda to the one variant which
+                matches. This is a dual of the <code>fields</code> method for
+                sum types, but unlike <code>fields</code> the lambda will apply
+                <em>only</em> to the matching variant; not to every variant.
+            </p>
+
+            <p>
+                Like <code>fields</code>, though, we have no greater knowledge
+                about the type of that variant in the context of the lambda, so
+                once again, we will specify a polymorphic lambda which takes a
+                <code>VariantType</code> type parameter. We do, however, have
+                one more piece of useful information about
+                <code>VariantType</code> which we didn't know about a field's
+                type: <code>VariantType</code> must be a subtype of the
+                derivation type. Therefore, we specify the lambda type variable
+                as <code>[VariantType <: DerivationType]</code>:
+            </p>
+            <pre>
+inline def split[DerivationType: SumReflection]: Show[DerivationType] = value =>
+  variant(value):
+    [VariantType <: DerivationType] => variant =>
+      ???
+</pre
+            >
+
+            <p>
+                So, in the body of the <code>variant</code> lambda, we now have
+                an instance of <code>VariantType</code>, which we know to be a
+                subtype of <code>DerivationType</code>. This is actually exactly
+                the same value as <code>value</code>, but its type has been
+                refined—to a type which is more precise; but also abstract.
+            </p>
+
+            <p>
+                As was the case with <code>fields</code>'s lambda, we have some
+                additional context available in this lambda:
+                <code>context</code> is an instance of
+                <code>Show[VariantType]</code> and <code>label</code> is the
+                name of the variant.
+            </p>
+
+            <p>
+                A trivial implementation of this lambda would just call
+                <code>variant.show</code>, since the contextual
+                <code>Show[VariantType]</code> value is available.
+            </p>
+
+            <pre>
+inline def split[DerivationType: SumReflection]: Show[DerivationType] = value =>
+  variant(value):
+    [VariantType <: DerivationType] => variant => variant.show
+</pre
+            >
+
+            <h4>Complementary Variants</h4>
+
+            <p>
+                When we provided the product derivation for <code>Eq</code>, we
+                used the <code>complement</code> method to get the corresponding
+                field with the correct type inside the body of
+                <code>fields</code>. The same is possible inside the body of
+                <code>variant</code>, but it returns an
+                <code>Optional</code> value, since an unrelated value of the
+                same sum type is, by no means, guaranteed to be the
+                <em>same</em> variant: if the other value is a different
+                variant, then it would not make sense to resolve that value with
+                the same type—and so an <code>Unset</code> value is returned
+                from <code>complement</code>.
+            </p>
+
+            <p>
+                If, however, both values represent the same variant, then we can
+                access that value, safely typed with the same type.
+            </p>
+
+            <p>
+                Here is an implementation of <code>split</code> for
+                <code>Eq</code>:
+            </p>
+            <pre>
+inline def split[DerivationType: SumReflection]: Eq[DerivationType] = (left, right) =>
+  variant(left):
+    [VariantType <: DerivationType] => leftValue =>
+      complement(right).let(context.equal(leftValue, _)).or(false)
+</pre
+            >
+
+            <p>
+                The interpretation of this implementation is that if the left
+                and right sum types represent the same variant, then we use
+                <code>context</code>, the typeclass instance that is common to
+                both, to compare them. Otherwise, since they are evidently
+                different, we return <code>false</code>.
+            </p>
+
+            <h4>Producer Sum Typeclasses</h4>
+
+            <p>
+                As with the <code>construct</code> method for product types, the
+                <code>delegate</code> method is used for producer sum types
+                which must return a new instance of the derivation type, without
+                having a preexisting value to work with. While
+                <code>variant</code> can unambiguously resolve which of the
+                variants its parameter value represents, just from its runtime
+                type, the method of discerning which variant is required from
+                its input will depend on the type of that input, and is not
+                guaranteed to succeed.
+            </p>
+
+            <p>
+                Imagine defining a <code>Decoder</code> type which reads values
+                from strings, and we expect the variant's type to be encoded at
+                the start of the string, for example,
+                <code>"Developer:Hamza,39"</code> and
+                <code>"Manager:Jane,52,2"</code> could both be representations
+                of instances of the sum type:
+            </p>
+            <pre>
+enum Employee:
+  case Developer(name: Text, age: Int)
+  case Manager(name: Text, age: Int, level: Int)
+</pre
+            >
+
+            <p>
+                We would like to inspect the part of the string before the
+                <code>:</code> and delegate to either the
+                <code>Developer</code> or <code>Manager</code> variants
+                accordingly.
+            </p>
+
+            <p>
+                But the typeclass could be passed the string,
+                <code>"Director:Beatrice,47"</code>, and no variant would exist
+                in the <code>Employee</code> sum type to delegate to.
+            </p>
+
+            <p>
+                As its first parameter, <code>delegate</code> expects the name
+                of the variant (i.e. its <code>label</code> value) to delegate
+                to. Its second parameter is another polymorphic lambda. As with
+                <code>construct</code> which had no <code>field</code> lambda
+                variable, <code>delegate</code> has no
+                <code>variant</code> lambda variable, and (likewise) offers the
+                matching variant's context.
+            </p>
+
+            <p>For our <code>Decoder</code> example, we have:</p>
+            <pre>
+object Decoder extends Derivation[Decoder]:
+  inline def split[DerivationType: SumReflection]: Decoder[DerivationType] = text =>
+    val prefix = text.cut(t":").head
+    delegate(prefix):
+      [VariantType <: DerivationType] => decoder =>
+        ???
+</pre
+            >
+
+            <p>
+                Having discerned which variant's decoder should be used, we can
+                then use this to decode the text following the <code>:</code>,
+                like so:
+            </p>
+            <pre>
+object Decoder extends Derivation[Decoder]:
+  inline def split[DerivationType: SumReflection]: Decoder[DerivationType] = text =>
+    text.cut(t":") match
+      case List(prefix, content) => delegate(prefix):
+        [VariantType <: DerivationType] => decoder => decoder.decode(content)
+</pre
+            >
+
+            <h3>Optional Derivation</h3>
+
+            <p>
+                By default, derivation will fail at compiletime if a field's or
+                variant's corresponding typeclass instance cannot be found by
+                contextual search. This is usually the desired behavior because
+                it indicates the absence of definitions which are inherently
+                necessary.
+            </p>
+
+            <p>
+                But it's not unusual to want generic derivation to succeed,
+                accepting that we should provide a fallback option when a
+                contextual value is not found. This can be achieved by importing
+                <code>derivationContext.relaxed</code> in the scope where
+                <code>join</code> and <code>split</code> are defined.
+            </p>
+
+            <p>
+                The presence of this import will change the signature of methods
+                such as <code>fields</code> slightly, so that the contextual
+                value provided to its lambda is an
+                <code>Optional[Typeclass]</code> instead of a
+                <code>Typeclass</code> instance. This means that there will no
+                longer be a contextual <code>Typeclass</code> available, so any
+                calls which expect one will fail to compile, but there will be a
+                contextual <code>Optional[Typeclass]</code> value instead, and
+                various control methods on <code>Optional</code> values can be
+                used to work with such a type.
+            </p>
+
+            <p>
+                We could take the <code>Show</code> example from earlier and
+                adjust it to fall back to a field's <code>toString</code> value
+                if a <code>Show</code> typeclass does not exist for that type:
+            </p>
+            <pre>
+object Show extends ProductDerivation[Show]:
+  inline def join[DerivationType <: Product: ProductReflection]: Show[DerivationType] = value =>
+    fields(value):
+      [FieldType] => field => context.layGiven(field.toString.tt)(field.show)
+    .join(t"[", t", ", t"]")
+</pre
+            >
+
+            <p>
+                This adjusted version refers to the contextual
+                <code>Show[FieldType]</code> value, which is available as
+                <code>context</code> inside the lambda, and uses
+                <code>layGiven</code> to provide the fallback option in the
+                first parameter block, with the original code (for when the
+                typeclass *is* available) in the second block. This is made
+                possible because when the <code>Optional</code> value is
+                present, <code>layGiven</code> injects its value contextually
+                into this parameter block.
+            </p>
+
+            <h3>Default Values</h3>
+
+            <p>
+                Case classes may be defined with default values for some of
+                their fields. These default values, if available, can be useful
+                during derivation. As one example, a JSON or XML decoder may
+                construct a product instance from values provided at runtime,
+                but could choose to use that product's default field values
+                whenever a field's value is missing from the runtime input.
+            </p>
+
+            <p>
+                A contextual <code>Default[Optional[FieldType]]</code> instance
+                called <code>default</code> is available within the lambda body
+                of <code>fields</code> and <code>contexts</code>, and calling
+                <code>default()</code> within either of these contexts will
+                provide an <code>Optional[FieldType]</code>.
+            </p>
+
+            <h3>Frequently-asked Questions</h3>
+
+            <h4>
+                How can I avoid generic derivation failing when a typeclass for
+                one or more parameters is missing?
+            </h4>
+
+            <p>Include the import,</p>
+            <pre>
+import wisteria.derivationContext.relaxed
+</pre
+            >
+            <p>
+                in the context where <code>join</code> and
+                <code>split</code> are defined. This will transform the type of
+                the typeclass value corresponding to the field from
+                <code>TypeclassType[ValueType]</code> to
+                <code>Optional[TypeclassType[ValueType]]</code>. Normally, this
+                also means that the typeclass will need to be applied
+                explicitly.
+            </p>
+
+            <h4>
+                How can I use other unrelated typeclasses in a
+                <code>join</code> or <code>split</code> implementation?
+            </h4>
+
+            <p>
+                The signatures of <code>join</code> and
+                <code>split</code> cannot be changed, so it is impossible to
+                include other typeclass instances in their implementations. But
+                both are inline methods, so <code>summonInline</code> and
+                <code>summonFrom</code> can be used to summon instances of other
+                typeclasses at compiletime, whether these relate to the
+                derivation type or a field type.
+            </p>
+
+            <h4>
+                How can I use Wisteria for generic derivation without making the
+                generically-derived typeclasses available to implicit search?
+            </h4>
+
+            <p>
+                Use a non-companion object extending <code>Derivation</code> or
+                <code>ProductDerivation</code> for the definitions of
+                <code>join</code> and <code>split</code>, and call the inline
+                <code>derived</code> method on that object, passing in the
+                derivation type.
+            </p>
+
+            <h4>
+                Why is a generically-derived typeclass instance not being found
+                when it is summoned?
+            </h4>
+
+            <p>
+                This is usually because typeclass instances relating to one or
+                more field or variant values cannot be found. To test this
+                theory, try compiling an explicit call to the inline
+                <code>derived</code> method at the callsite where contextual
+                search is failing.
+            </p>
+
+            <h4>
+                Why is another contextual instance being selected by contextual
+                search instead of a generically-derived one?
+            </h4>
+
+            <p>
+                Assuming the generically-derived typeclass instance *is* a valid
+                candidate for selection, this is probably because the derived
+                candidate has a lower priority. Since the
+                <code>given</code> instance is defined in either
+                <code>ProductDerivation</code> or <code>Derivation</code>, which
+                is typically inherited by the typeclass's companion object, its
+                priority is naturally lower than <code>given</code> instances
+                defined in the body of that companion object.
+            </p>
+
+            <p>
+                One solution would be to artificially reduce the priority of the
+                undesired contextual instances, for example by adding an
+                additional <code>(using DummyImplicit)</code> parameter, or
+                moving the definition to an inherited trait.
+            </p>
+
+            <p>
+                Another solution is to define <code>join</code> and
+                <code>split</code> in an unrelated (non-companion) object, and
+                to define an inline given called <code>derived</code> directly
+                in the companion object, like so:
+            </p>
+            <pre>
+object Unrelated extends ProductDerivation[Typeclass]:
+  def join[DerivationType <: Product: ProductReflection]: Typeclass[DerivationType] = ???
+
+object Typeclass:
+  inline given derived[DerivationType]: Typeclass[DerivationType] = Unrelated.derived
+</pre
+            >
+
+            <h4>
+                How can I resolve a derived contextual instance conflicting with
+                another, with an ambiguity error?
+            </h4>
+
+            <p>
+                Two contextual values are ambiguous if both match the expected
+                type and the compiler is unable to find a reason why one should
+                be chosen over the other. There are several ways of changing the
+                <em>priority</em> of <code>given</code> values, but in more
+                complex cases, this can have the unintended consequence of
+                causing a new ambiguity elsewhere with a different contextual
+                value.
+            </p>
+
+            <p>
+                The most reliable way to avoid this problem is to select the set
+                of <code>given</code> definitions that can be ambiguous, and to
+                be explicit about their priority using
+                <code>compiletime.summonFrom</code>.
+            </p>
+
+            <p>
+                To transform an existing set of ambiguous <code>given</code>s,
+                first change them from <code>given</code>s into ordinary
+                <code>def</code>s. For instances derived by Wisteria, this
+                requires the derivation to be implemented outside the companion
+                object (see above). Then, define the <code>derived</code>
+                <code>given</code> as:
+            </p>
+            <pre>
+inline given derived[ValueType]: DerivationType[ValueType] =
+  compiletime.summonFrom:
+    // cases
+</pre
+            >
+
+            <p>
+                We will specify one case for each of the previous
+                <code>given</code> definitions, in the order that they should be
+                attempted.
+            </p>
+
+            <p>
+                Each case should be a type pattern, a <code>given case</code> or
+                a wildcard pattern which will use the presence of a contextual
+                instance of the specified type (at the callsite) to determine if
+                that particular case should match. For example, if we want to
+                define derivation for a <code>Debug</code> typeclass which
+                returns the "best" string value for a particular type, we could
+                write it as follows:
+            </p>
+            <pre>
+object Debug:
+  inline given derived[ValueType]: Debug[ValueType] = value =>
+    compiletime.summonFrom:
+      case encoder: Encoder[ValueType] => encoder.encode(value)
+      case given Show[ValueType]       => value.show
+      case _                           => value.toString
+</pre
+            >
+
+            <p>In plain English, this could be interpreted as,</p>
+            <ul>
+                <li>
+                    if there is an <code>Encoder</code> for <code>value</code>'s
+                    type, use it to encode the value
+                </li>
+                <li>
+                    if there is a <code>Show</code> for <code>value</code>'s
+                    type, make it available in-scope on the right-hand side of
+                    the case clause, and use it to <code>show</code> the value
+                </li>
+                <li>
+                    otherwise, just use the <code>value</code>'s
+                    <code>toString</code> method
+                </li>
+            </ul>
+
+            <h4>
+                How can I generically-derive a typeclass for a type which
+                indirectly refers to its own type in its fields?
+            </h4>
+
+            <p>A recursive type such as <code>Tree</code>,</p>
+            <pre>
+enum Tree:
+  case Leaf
+  case Branch(left: Tree, value: Int, right: Tree)
+</pre
+            >
+            <p>
+                cannot be derived in-place, and should be explicitly defined on
+                that type's companion object. The easiest way to do this is to
+                add a <code>derives</code> clause to the companion. For example,
+            </p>
+            <pre>
+object Tree derives Typeclass
+</pre
+            >
+
+            <h4>
+                Why does the compiler fail during derivation with a long message
+                that mentions that,
+                <code
+                    >given instance derived in trait Derivation does not match
+                    type...</code
+                >?
+            </h4>
+
+            <p>
+                This is usually because the polymorphic lambda's type variable
+                for <code>delegate</code> or <code>variant</code> is missing its
+                upper bound. It is essential that the type variable is specified
+                as <code>[VariantType <: DerivationType]</code> and not just,
+                <code>[VariantType]</code>.
+            </p>
+
+            <h4>
+                >Why does the compiler report a type mismatch between the
+                derivation type and <code>Product</code>?
+            </h4>
+
+            <p>
+                This is usually because the derivation type in the signature of
+                <code>join</code> is missing the
+                <code><: Product</code> constraint.
+            </p>
+
+            <h3>License</h3>
+            <p>
+                Wisteria is copyright &copy; 2024 Jon Pretty & Propensive
+                O&Uuml;, and is made available under the Apache 2.0 License.
+            </p>
+        </main>
+    </body>
+</html>
