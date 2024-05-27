@@ -131,12 +131,12 @@ would become a series of <code>Sub</code>s, regardless of whether the similarity
 
 <p>A <code>Diff</code> instance, say <code>diff</code>,  may be applied to a sequence, <code>seq</code>, with,</p>
 <pre>
-diff.applyTo(seq)
+diff.patch(seq)
 </pre>
 <p>to produce a new sequence. This is performed lazily, so the result is a <code>LazyList</code>.</p>
 
 <p>By default, a <code>Par</code> "edit" will leave the element in the original sequence unchanged.
-However, <code>applyTo</code> has an optional second parameter, <code>update</code>, which can be provided
+However, <code>patch</code> has an optional second parameter, <code>update</code>, which can be provided
 to specify how <code>Par</code> edits should be handled. Of course, if the edit is a <code>Par</code>, the
 original and diff versions of element <em>should</em> be equal anyway, but may not be if,
 for example, the diff was constructed with a different "compare" function or the
