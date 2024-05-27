@@ -1,0 +1,220 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Soundness: Dendrology</title>
+        <meta charset="utf-8" />
+        <link rel="stylesheet" href="/styles.css" />
+        <link rel="icon" type="image/x-icon" href="/images/logo2.svg" />
+    </head>
+    <body>
+        <nav>
+            <ul>
+                <li><a href="/">home</a></li>
+                <li>
+                    <a href="https://github.com/propensive/soundness"
+                        >contribute</a
+                    >
+                </li>
+                <li>
+                    <a href="https://discord.com/invite/MBUrkTgMnA">discuss</a>
+                </li>
+            </ul>
+        </nav>
+        <main>
+            <h2>Dendrology</h2>
+            <p class="intro">
+              Rendering of trees and DAGs in the console
+            </p>
+            <h3>About</h3>
+            <p>
+                <img
+                    src="https://github.com/propensive/dendrology/raw/main/doc/logo.svg"
+                />
+
+
+<b>Dendrology</b> provides methods for rendering data in a tree or directed acyclic graph
+structure as lines, for rendering in a monospaced font, typically in a terminal.</p>
+
+
+            <h3>Features</h3>
+            <ul>
+<li>display any tree-structured data as a tree in a console</li>
+<li>tree data can be of any type whose children can be accessed recursively</li>
+<li>display directed acyclic graphs in a console</li>
+<li>output is a linearized sequence of any type</li>
+<li>tree input is processed lazily, and output is a stream</li>
+<li>can be easily adapted to any grid-like layout, e.g. an HTML table</li>
+<li>custom textual renderings are available</li>
+            </ul>
+            <h3>Availability</h3>
+            <p>
+                Dendrology is available as a binary for Scala 3.4.0 and later,
+                from <a href="https://central.sonatype.com">Maven Central</a>.
+                To include it in an <code>sbt</code> build, use the coordinates:
+            </p>
+            <pre>
+libraryDependencies += "dev.soundness" % "dendrology-tree" % "0.2.0"</pre>
+<p>and,</p>
+            <pre>
+libraryDependencies += "dev.soundness" % "dendrology-dag" % "0.2.0"</pre>
+            <h3>Getting Started</h3>
+<p>Dendrology can render tree-like structures as text, such as the following,</p>
+<pre style="font-family: 'JetBrains Mono', monospace">
+├─● Plantae
+├─● Fungi
+│ ├─● Rozellomyceta
+│ ├─● Aphelidiomyceta
+│ └─● Eumycota
+├─● Protozoa
+├─● Bacteria
+└─● Animalia
+  └─● Chordata
+    └─● Mammalia
+      └─● Carnivora
+        ├─● Feliadae
+        ├─● Canidae
+        │ └─● Canis
+        └─● Ursidae
+</pre>
+<p>and DAGs such as this:</p>
+<pre style="font-family: 'JetBrains Mono', monospace">
+▪ Any
+└─▪ Matchable
+  ├─▪ AnyRef
+  │ ├─▪ List[Int]
+  └─│─│─▪ AnyVal
+    │ │ ├─▪ Boolean
+    │ │ ├─│─▪ Int
+    │ │ └─│─│─▪ Unit
+    └─│───│─│─│─▪ String
+      └───│─│─│─┴─▪ Null
+          └─┴─┴───┴─▪ Nothing
+</pre>
+
+<p>Dendrology is versatile, and can represent data in a variety of input and output types, so long as methods are
+specified for working with those types.</p>
+
+<p>All Dendrology terms and types are in the <code>dendrology</code> package.</p>
+<pre>
+import dendrology.*
+</pre>
+and exported to the `soundness` package, so you can alternatively use,
+<pre>
+import soundness.*
+</pre>
+
+<h2>Trees</h2>
+
+<p>To create a tree, all we need is the root node (or nodes), of some type, and a way to access a node's children
+(of the same type). This can then be applied recursively to the root node to fully expand the tree. This
+approach has the advantage that it does not require the data to be reshaped into a particular data structure to
+be used.</p>
+
+<p>Dendrology makes it possible to define the method for accessing a node's children in two ways: either as a
+lambda when a <code>TreeDiagram</code> is constructed, like so,</p>
+<pre>
+import anticipation.Text
+
+case class Person(name: Text, age: Int, children: List[Person])
+val daughter = Person(t"Jill", 7, List())
+val son = Person(t"Jack", 9, List())
+val headOfFamily = Person(t"John", 37, List(son, daughter))
+
+val diagram = TreeDiagram.by[Person](person =&gt; person.children)(headOfFamily)
+</pre>
+<p>or alternatively through a contextual instance of the typeclass <code>Expandable</code> for the given node type. Types
+which are naturally hierarchical can, of course, define their own <code>Expandable</code> instances so they can be used in
+tree-structures without the need to specify how child nodes should be accessed. For example:</p>
+<pre>
+given Expandable[Person] = _.children
+val diagram2 = TreeDiagram(headOfFamily)
+</pre>
+
+<p>It's possible to include multiple root nodes as parameters to <code>TreeDiagram</code>, which will appear as top-level
+siblings in the tree.</p>
+
+<p>Instances of <code>TreeDiagram</code> provide a few methods to help with rendering a diagram. The <code>render</code> method will
+meet most requirements for rendering a tree diagram as a series of lines. The <code>render</code> method takes a single
+parameter, a lambda for converting from the type of the nodes, <code>NodeType</code>, to a serialized type of each line,
+<code>LineType</code>. Typical choices might be a <code>NodeType</code> of some user-defined type like <code>Person</code>, and a <code>LineType</code> of
+<code>Text</code>.</p>
+
+<p>For example, we could write,</p>
+<pre>
+import treeStyles.default
+
+val lines = diagram2.render(_.name)
+@main
+def run(): Unit =
+  lines.foreach(Out.println(_))
+</pre>
+
+<p>The algorithm performs a depth-first traversal of the data, mapping each node to a line, and flattening the data
+in the process. The output will be a <code>LazyList[LineType]</code>.</p>
+
+<p>The parameter to the <code>render</code> method, <code>_.name</code>, will determine the <code>LineType</code> is <code>Text</code>, which will resolve a
+contextual <code>TreeStyle[Text]</code>, which is needed to render the horizontal and vertical lines of the diagram as
+<code>Text</code>. The <code>dendrology.treeStyles</code> package provides <code>default</code>, <code>rounded</code> and <code>ascii</code> renderings for <code>Text</code> and
+other <code>Textual</code> types.</p>
+
+<p>In addition to <code>render</code>, the method <code>TreeDiagram#nodes</code> can recover the node value used to generate each line in
+the diagram. A common way to make use of this is to zip it with the output from <code>render</code> to get a
+<code>LazyList[(LineType, NodeType)]</code> which could be used to perform additional post-processing of each line, based
+on information from its corresponding node.</p>
+
+<h3>Laziness</h3>
+
+<p>The <code>drawTree</code> implementation accesses the tree data structure mostly lazily, but _does_ need to know the number
+of elements in each ancestor of the current node, yet does not need to know anything about the descendants of
+subsequent nodes in the traversal until they are reached in their natural order.</p>
+
+<p>This is necessary because any subsequent siblings of any ancestor nodes will require an additional descending
+vertical line to be rendered in the appropriate column of the current line, whereas that vertical line should be
+absent for each ancestor that is the last of its siblings.</p>
+
+<h2>Directed Acyclic Graphs</h2>
+
+<p>A DAG diagram is represented by the <code>DagDiagram</code> class, and should be constructed from a <code>Dag</code> instance from
+<a href="https://github.com/propensive/acyclicity/">Acyclicity</a>.</p>
+
+<p>For example, given a value <code>dag</code>, an instance of <code>Dag[Person]</code>, we can construct a new <code>DagDiagram</code> with
+<code>DagDiagram(dag)</code>. Unlike <code>TreeDiagram</code>, <code>DagDiagram</code> always takes exactly one parameter.</p>
+
+<p>Like <code>TreeDiagram</code>, though, <code>DagDiagram</code> provides <code>render</code> and <code>nodes</code> methods with the same purpose. While
+<code>TreeDiagram</code> returns a <code>LazyList</code>, <code>DagDiagram</code> cannot (due to the nature of the data it represents) evaluate
+lazily, and provides a strict <code>List</code>.</p>
+
+<p>Here is the full code used to create the example DAG above:</p>
+<pre>
+import acyclicity.Dag
+import gossamer.t
+import turbulence.Out, turbulence.stdioSources.jvm
+import dagStyles.default
+
+val dag = Dag(
+  t"Any"       -&gt; Set(),
+  t"Matchable" -&gt; Set(t"Any"),
+  t"AnyVal"    -&gt; Set(t"Matchable"),
+  t"AnyRef"    -&gt; Set(t"Matchable"),
+  t"Unit"      -&gt; Set(t"AnyVal"),
+  t"Boolean"   -&gt; Set(t"AnyVal"),
+  t"Int"       -&gt; Set(t"AnyVal"),
+  t"String"    -&gt; Set(t"AnyRef"),
+  t"List[Int]" -&gt; Set(t"AnyRef"),
+  t"Null"      -&gt; Set(t"String", t"List[Int]"),
+  t"Nothing"   -&gt; Set(t"Null", t"Unit", t"Boolean", t"Int")
+)
+
+@main
+def run2(): Unit =
+  DagDiagram(dag).render { node => t"▪ $node" }.foreach(Out.println(_))
+</pre>
+
+            <h3>License</h3>
+            <p>
+                Dendrology is copyright &copy; 2024 Jon Pretty &amp; Propensive
+                O&Uuml;, and is made available under the Apache 2.0 License.
+            </p>
+        </main>
+    </body>
+</html>

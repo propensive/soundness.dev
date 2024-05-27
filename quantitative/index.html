@@ -1,0 +1,460 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Soundness: Quantitative</title>
+        <meta charset="utf-8" />
+        <link rel="stylesheet" href="/styles.css" />
+        <link rel="icon" type="image/x-icon" href="/images/logo2.svg" />
+    </head>
+    <body>
+        <nav>
+            <ul>
+                <li><a href="/">home</a></li>
+                <li>
+                    <a href="https://github.com/propensive/soundness"
+                        >contribute</a
+                    >
+                </li>
+                <li>
+                    <a href="https://discord.com/invite/MBUrkTgMnA">discuss</a>
+                </li>
+            </ul>
+        </nav>
+        <main>
+            <h2>Quantitative</h2>
+            <p class="intro">
+              Statically-checked physical units with seamless syntax
+            </p>
+            <h3>About</h3>
+            <p>
+                <img
+                    src="https://github.com/propensive/quantitative/raw/main/doc/logo.svg"
+                />
+
+When working with physical quantities, such as lengths, masses or temperatures,
+it can be easy to mix up quantities with different units, especially if we
+represent all quantities with <code>Double</code>s, which is often necessary for
+performance.</p>
+
+<p>Quantitative represents physical quantities with a generic <code>Quantity</code> type, an
+opaque alias of <code>Double</code>, which statically encodes the value's units in its
+type parameter. This provides all the desirable homogeneity constraints when
+combining quantities, with the performance of <code>Double</code>s, and without
+compromising on intuitive syntax for arithmetic operations.</p>
+
+<p>Quantities can be multiplied and divided arbitrarily, with new units computed
+by the compiler, and checked for consistency in additions and subtractions.</p>
+            <h3>Features</h3>
+            <ul>
+
+<li>statically checks that physical quantities have consistent units by making them distinct types</li>
+<li><code>Quantity</code> values encode the (nonzero) power of each unit in their type</li>
+<li>all <code>Quantity</code>s are opaque aliases of <code>Double</code>, so are stored and processed efficiently</li>
+<li>enforces homogeneous units for all additions and subtractions</li>
+<li>calculates resultant units for multiplications and divisions</li>
+<li>unitless values are seamlessly represented by <code>Double</code>s</li>
+<li>distinguishes between <em>dimensions</em> (such as length or mass) and <em>units</em> (such as metres or feet)</li>
+<li>different units of the same dimension may be combined</li>
+<li>convertions between different units of the same dimension</li>
+<li>requires no new or special syntax</li>
+<li>supports units which are offset from zero, such as degrees Celsius and Fahrenheit</li>
+<li>fully extensible: new units, dimensions and conversions can be introduced</li>
+<li>provides implementations of base and most derived SI units</li>
+<li>represents the seven SI base dimensions (length, mass, time, luminosity, amount of substance,
+  current and temperature) as well as other distinct dimensions, such as angles</li>
+
+            </ul>
+            <h3>Availability</h3>
+            <p>
+                Quantitative is available as a binary for Scala 3.4.0 and later,
+                from <a href="https://central.sonatype.com">Maven Central</a>.
+                To include it in an <code>sbt</code> build, use the coordinates:
+            </p>
+            <pre>
+libraryDependencies += "dev.soundness" % "quantitative-core" % "0.1.0"</pre
+            >
+            <h3>Getting Started</h3>
+
+
+
+<p>All Quantitative terms and types are defined in the <code>quantitative</code> package,</p>
+<pre>
+import quantitative.*
+</pre>
+<p>and exported to the <code>soundness</code> package:
+<pre>
+import soundness.*
+</pre>
+
+<h3><code>Quantity</code> types</h3>
+
+<p>Physical quantities can be represented by different <code>Quantity</code> types, with an appropriate parameter that encodes
+the value's units. We can create a quantity by multiplying an existing <code>Double</code> (or any numeric type) by some
+unit value, such as <code>Metre</code> or <code>Joule</code>, which are just <code>Quantity</code> values equal to <code>1.0</code> of the appropriate unit.</p>
+<p>For example:</p>
+<pre>
+val distance = 58.3*Metre
+</pre>
+
+<p>The types of these values will be inferred. The value <code>distance</code> will get the type <code>Quantity[Metres[1]]</code>, since
+its value is a number of metres (raised to the power <code>1</code>).</p>
+
+<p>In general, types representing units are written in the plural (for example, <code>Metres</code>, <code>Feet</code>, <code>Candelas</code>), with
+a bias for distinction when the singular name is often used in the plural; for example, the type is <code>Kelvins</code>
+even though "Kelvins" and "Kelvin" are both commonly used for plural values. Unit instances are always named in
+the singular.</p>
+
+<p>We can compute an <code>area</code> value by squaring the distance,</p>
+<pre>
+val area = distance*distance
+</pre>
+<p>which should have units of square metres (<code>m²</code>). Quantitative represents this as the type, <code>Quantity[Metres[2]]</code>; the
+<code>2</code> singleton literal value represents the metres being squared. Likewise, a volume would have the parameter
+<code>Metres[3]</code>.</p>
+
+<h3>Representation and displaying</h3>
+
+<p>Each quantity, regardless of its units, is represented in the JVM as a <code>Double</code> using an opaque type
+alias.</p>
+
+<p>The precise types, representing units, are known statically, but are erased by runtime. Hence, all
+dimensionality checking takes place at compiletime, after which, operations on <code>Quantity</code>s will be
+operations on <code>Double</code>s, and will achieve similar performance.</p>
+
+<p>The raw <code>Double</code> value of a <code>Quantity</code> can always be obtained with <code>Quantity#value</code>.</p>
+
+<p>Due to this representation, the <code>toString</code> method on <code>Quantity</code>s is the same as <code>Double</code>s <code>toString</code>,
+so the <code>toString</code> representations will show just the raw numerical value, without any units. In
+general, <code>toString</code> should not be used. A <code>gossamer.Show</code> instance is provided to produce
+human-readable <code>Text</code> values, so calling <code>show</code> on a <code>Quantity</code> will produce much better output.</p>
+
+<h3>Derived units</h3>
+
+<p>We can also define:</p>
+<pre>
+val energy = Joule*28000
+</pre>
+
+<p>The type of the <code>energy</code> value <em>could</em> have been defined as <code>Quantity[Joule[1]]</code>, but 1 J is equivalent to 1
+kg⋅m²⋅s¯², and it's more useful for the type to reflect a product of thes more basic units (even though we
+can still use the <code>Joule</code> value to construct it).</p>
+
+<p>Metres, seconds and kilograms are all SI base units. Kilograms are a little different, since <em>nominally</em>, a
+kilogram is one thousand grams (while a gram is <em>not</em> an SI base unit), and this has a small implication on
+the way we construct such units.</p>
+
+<p>Quantitative provides general syntax for metric naming conventions, allowing prefixes such as <code>Nano</code> or <code>Mega</code>
+to be applied to existing unit values to specify the appropriate scale to the value. Hence, a kilogram value
+is written, <code>Kilo(Gram)</code>. But since the SI base unit is the kilogram, this and any other multiple of <code>Gram</code>,
+such as <code>Micro(Gram)</code>, will use the type <code>Kilogram</code>, or more precisely, <code>Kilogram[1]</code>.</p>
+
+<p>Therefore, the type of <code>energy</code> is <code>Quantity[Grams[1] &amp; Metres[2] &amp; Second[-2]]</code>, using a combination of three
+base units raised to different powers. They are combined into an intersection type with the <code>&amp;</code> type operator,
+which provides the useful property that the order of the intersection is unimportant;
+<code>Second[-2] &amp; Metres[2] &amp; Grams[1]</code> is an <em>identical</em> type, much as kg m²s¯² and s¯²m²kg are identical
+units.</p>
+
+<p>Just as we could construct an area by multiplying two lengths, we can compute a new value with appropriate units
+by combining, say, <code>area</code> and <code>energy</code>,</p>
+<pre>
+val volume = distance*distance*distance
+val energyDensity = energy/volume
+</pre>
+<p>and its type will be inferred with the parameter <code>Kilogram[1] &amp; Metres[-1] &amp; Second[-2]</code>.</p>
+
+<p>If we had instead calculated <code>energy/area</code>, whose units do not include metres, the type parameter would be just
+<code>Kilogram[1] &amp; Second[-2]</code>; the redundant <code>Metres[0]</code> would be automatically removed from the conjunction.</p>
+
+<p>We can go further. For example, the "SUVAT" equations of motion can be safely implemented as methods, and
+their dimensionality will be checked at compiletime. For example, the equation, <code>s = ut + ½at²</code> for
+calculating a distance (<code>s</code>) from an initial velocity (<code>u</code>), acceleration (<code>a</code>) and time (<code>t</code>) can be
+implemented using Quantitative <code>Quantity</code>s with:</p>
+<pre>
+def s(u: Quantity[Metres[1] &amp; Seconds[-1]], t: Quantity[Seconds[1]], a: Quantity[Metres[1] &amp; Seconds[-2]])
+    : Quantity[Metres[1]] =
+  u*t + 0.5*a*t*t
+</pre>
+
+<p>While the method arguments have more complex types, the expression, <code>u*t + 0.5*a*t*t</code>, is checked for
+dimensional consistency. If we had written <code>t + 0.5*a*t*t</code> or <code>u*t + 0.5*a*a*t</code> instead, these would
+have produced errors at compiletime.</p>
+
+<h3>Combining mixed units</h3>
+
+<p>Kilograms, metres and seconds are units of in the mass, length and time dimensions, which are never
+interchangeable. Yet we sometimes need to work with different units of the same dimension, such as
+feet, metres, yards and miles as different (but interchangeable) units of length; or kilograms and
+pounds, as units of mass.</p>
+
+<p>Each type representing units, such as <code>Metres</code> or <code>Kilograms</code>, must be a subtype of the <code>Units</code> type,
+which is parameterized with its power (with a singleton literal integer) and a <em>dimension</em>, i.e. another type
+representing the nature of the measurement. For <code>Metres</code> the dimension is <code>Length</code>; for <code>Kilograms</code>'s it is
+<code>Mass</code>; <code>Candela</code>'s is <code>Luminosity</code>.</p>
+
+<p><code>Metres[PowerType]</code> is a subtype of <code>Units[PowerType, Length]</code>, where <code>PowerType</code> must be a singleton
+integer type. More specifically, <code>Metres[1]</code> would be a subtype of <code>Units[1, Length]</code>.</p>
+
+<p>Note that there are no special dimensions for compound units, like energy, since the time, length and mass
+components of the units of an energy quantity will be associated with the <code>Second</code>, <code>Metres</code> and <code>Kilogram</code>
+types respectively.</p>
+
+<p>Encoding the dimension in the type makes it possible to freely mix different units of the same dimension.</p>
+
+<p>It is possible to create new length or mass units, such as <code>Inch</code> or <code>Pound</code>, which share the <code>Length</code> or <code>Mass</code>
+dimensions. This allows them to be considered equivalent in some calculations, if a conversion coefficient is
+available.</p>
+
+<p>Quantitative defines a variety of imperial measurements, and will automatically convert units of the same
+dimension to the same units in multiplications and divisions. For example,</p>
+<pre>
+val width = 0.3*Metre
+val height = 5*Inch
+val area2 = width*height
+</pre>
+<p>will infer the type <code>Quantity[Metres[2]]</code> for <code>area2</code>.</p>
+
+<p>However, the conversion of one of the units from inches to metres was necessary only to avoid a mixture of
+<code>Inches</code> and <code>Metres</code> in the resultant type, but the expression, <code>height*height</code> would produce a value with the
+units, <code>Inches[2]</code>, performing no unnecessary conversions.</p>
+
+<h3>Conversions</h3>
+
+<h4>Addition &amp; subtraction</h4>
+
+<p>Addition and subtraction are possible between quantities which share the same dimension.</p>
+
+<p>We can safely add an inch and a metre,</p>
+<pre>
+val length = 1*Inch + 1*Metre
+</pre>
+<p>but we can't subtract a second from a litre:</p>
+<pre>
+val nonsense = Litre - Second // will not compile
+</pre>
+
+<p>For the addition and subtraction of values with mixed units, the question arises of which units the result
+should take. Quantitative will use the <em>principal unit</em> for the dimension, which is determined by the presence
+of a unique contextual <code>PrincipalUnit</code> instance, parameterized on <code>Dimension</code> and <code>Units</code> types.</p>
+
+<p>In general, if the units for the same dimension don't match between the operands, then the principal unit
+will be used for both. This may mean that adding a foot to a mile produces a result measured in metres,
+but a new <code>PrincipalUnit[Length, Miles[1]]()</code> contextual value could always be provided in-scope,
+which will take precedence over the <code>PrincipalUnit[Length, Metres[1]]</code> in scope.</p>
+
+<p>Some additional contextual values may be required, though. See below for more
+information on conversions.</p>
+
+<h4>Inequality Comparisons</h4>
+
+<p>Likewise, we can compare units in like or mixed values with the four standard inequality operators
+(<code>&lt;</code>, <code>&gt;</code>, <code><=</code>, <code>&gt;=</code>). These will return <code>true</code> or <code>false</code> if the operands have the same dimension,
+even if they have different units, for example,</p>
+<pre>
+8*Foot < 4*Metre // returns true
+</pre>
+</p>while incompatible units will result in a compile error.</p>
+
+<h4>Equality</h4>
+
+<p>Equality between different <code>Quantity</code> values should be treated with care, since all such values are
+represented as <code>Double</code>s at runtime, and the JVM's standard equality will not take units into
+account. So, by default, <code>3*Foot == 3*Metre</code> will yield <code>true</code>, since <code>3.0 == 3.0</code>!</p>
+
+<p>This is highly undesirable, but luckily there's a solution:</p>
+<pre>
+import language.strictEquality
+</pre>
+
+<p>This turns on Scala's strict-equality feature, which forbids comparisons between any two types unless
+a corresponding <code>CanEqual[LeftOperandType, RightOperandType]</code> exists in scope for the appropriate
+operand types. Quantitative provides just such an instance for <code>Quantity</code> instances with the same units.</p>
+
+<p>The runtime equality check, however, is performed in exactly the same way: by comparing two <code>Double</code>s.
+That is absolutely fine if we know the units are identical, but it does not allow equality comparisons
+between <code>Quantity</code>s of the same dimension and different units.</p>
+
+<p>For this, there are two possibilities:</p>
+<ul>
+<li> convert one of the <code>Quantity</code>s to the units of the other</li>
+<li>test <code>left <= right &amp;&amp; left >= right</code>, which will only be true if <code>left</code> equals <code>right</code></li>
+</ul>
+
+<h4>Conversion ratios</h4>
+
+<p>In order to automatically convert between two units, Quantitative needs to know the ratio between them.
+This is provided with a contextual <code>Ratio</code> value for the appropriate pair of units: one with the
+power <code>1</code> and the other with the power <code>-1</code>. The rate of conversion should be specified as a singleton
+literal <code>Double</code> as the second parameter. The <code>given</code> may be <code>erased</code>, if using Scala's erased definitions.</p>
+
+<p>For example,</p>
+<pre>
+erased given Ratio[Kilograms[1] &amp; Tons[-1], 1016.0469088]
+</pre>
+<p>which specifies that there are about 1016 kilograms in a ton, and will be used if Quantitative ever needs
+to convert between kilograms and tons.</p>
+
+<p>By making the conversion rate a <em>type</em> (a singleton literal, specifically), its value is available at
+compiletime, even while the <code>given</code> is <code>erased</code>. This has the further advantage that any calculations on
+<code>Quantity</code>s which need to use the conversion ratio in a calculation involving other constants will use
+constant folding to automatically perform arithmetic operations on constants at compiletime, saving the
+performance cost of doing these at runtime.</p>
+
+<h3>Explicit Conversions</h3>
+
+<p>To convert a quantity to different units, we can use the <code>in</code> method, passing it an <em>unapplied</em> units type
+constructor, such as <code>Hour</code> or <code>Furlong</code>. The significance of the type being "unapplied" is that a units type
+constructor is typically <em>applied</em> to an integer singleton type, such as <code>Metres[2]</code> representing square
+metres. Each dimension in a quantity must have the same units, no matter what its power, so it doesn't make
+sense to specify that power when converting.</p>
+
+<p>So, <code>(10*Metre).in[Yards]</code>, would create a value representing approximately 10.94 yards, while,
+<code>(3*Foot * 1*Metre * 0.4*Centi(Metre)).in[Inches]</code>, would calculate a volume in cubic inches.</p>
+
+<p>If a quantity includes units in multiple dimensions, these can be converted in steps, for example,</p>
+<pre>
+val distance2 = 100*Metre
+val time = 9.8*Second
+val speed = distance2/time
+val mph = speed.in[Miles].in[Hours]
+</pre>
+
+<h3>SI definitions</h3>
+
+<p>There are seven SI base dimensions, with corresponding units, which are defined by Quantitative:</p>
+<ul>
+ <li> <code>Length</code> with units type, <code>Metres</code>, and unit value, <code>Metre</code></li>
+ <li> <code>Mass</code> with units, <code>Kilograms</code>, and unit value, <code>Kilogram</code></li>
+ <li> <code>Time</code> with units, <code>Seconds</code>, and unit value, <code>Second</code></li>
+ <li> <code>Current</code> with units, <code>Amperes</code>, and unit value, <code>Ampere</code></li>
+ <li> <code>Luminosity</code> with units, <code>Candelas</code>, and unit value, <code>Candela</code></li>
+ <li> <code>AmountOfSubstance</code> with units, <code>Moles</code>, and unit value, <code>Mole</code></li>
+ <li> <code>Temperature</code> with units, <code>Kelvins</code>, and unit value, <code>Kelvin</code></li>
+</ul>
+
+<p>As well as these, the following SI derived unit values are defined in terms of the base units:</p>
+<ul>
+ <li> <code>Hertz</code>, for measuring frequency, as one per second</li>
+ <li> <code>Newton</code>, for measuring force, as one metre-kilogram per square second</li>
+ <li> <code>Pascal</code>, for measuring pressure, as one Newton per square metre</li>
+ <li> <code>Joule</code>, for measuring energy, as one Newton-metre</li>
+ <li> <code>Watt</code>, for measuring power, as one Joule per second</li>
+ <li> <code>Coulomb</code>, for measuring electric charge, as one second-Ampere</li>
+ <li> <code>Volt</code>, for measuring electric potential, as one Watt per Ampere</li>
+ <li> <code>Farad</code>, for measuring electrical capacitance, as one Coulomb per Volt</li>
+ <li> <code>Ohm</code>, for measuring electrical resistance, as one Volt per Ampere</li>
+ <li> <code>Siemens</code>, for measuring electrical conductance, as one Ampere per Volt</li>
+ <li> <code>Weber</code>, for measuring magnetic flux, as one Volt-second</li>
+ <li> <code>Tesla</code>, for measuring magnetic flux density, as one Weber per square metre</li>
+ <li> <code>Henry</code>, for measuring electrical inductance, as one Weber per Ampere</li>
+ <li> <code>Lux</code>, for measuring illuminance, as one Candela per square metre</li>
+ <li> <code>Becquerel</code>, for measuring radioactivity, as one per second</li>
+ <li> <code>Gray</code>, for measuring ionizing radiation dose, as one Joule per kilogram</li>
+ <li> <code>Sievert</code>, for measuring stochastic health risk of ionizing radiation, as one Joule per kilogram</li>
+ <li> <code>Katal</code>, for measuring catalytic activity, as one mole per second</li>
+</ul>
+
+<h2>Defining your own units</h2>
+
+<p>Quantitative provides implementations of a variety of useful (and some less useful) units from the
+metric system, CGS and imperial. It's also very easy to define your own units.</p>
+
+<p>Imagine we wanted to implement the FLOPS unit, for measuring the floating-point performance of a
+CPU: floating-point instructions per second.</p>
+
+<p>Trivially, we could create a value,</p>
+<pre>
+val SimpleFlop = 1.0/Second
+</pre>
+<p>and use it in equations such as, <code>1000000*SimpleFlop * Minute</code> to yield an absolute number representing
+the number of floating-point instructions that could (theoretically) be calculated in one minute by
+a one-megaFLOP CPU.</p>
+
+<p>But this definition is just a value, not a unit. We can tweak the definition slightly to,</p>
+<pre>
+val Flop = MetricUnit(1.0/Second)
+</pre>
+<p>and it becomes possible to use metric prefixes on the value. So we could rewrite the above expression
+as, <code>Mega(Flop) * Minute</code>.</p>
+
+<h3>Introducing new dimensions</h3>
+
+<p>The result is just a <code>Double</code>, though, which is a little unsatisfactory, since it represents
+something more specific: a number of instructions. To do better, we need to introduce a new
+<code>Dimension</code>, distinct from length, mass and other dimensions, and representing a CPU's
+performance,</p>
+<pre>
+trait CpuPerformance extends Dimension
+</pre>
+<p>and create a <code>Flops</code> type corresponding to this dimension:</p>
+<pre>
+import rudiments.*
+trait Flops[PowerType <: Nat] extends Units[PowerType, CpuPerformance]
+val Flop: MetricUnit[Flops[1]] = MetricUnit(1)
+</pre>
+
+<p>The type parameter, <code>PowerType</code>, is a necessary part of this definition, and must be constrained on
+the <code>Nat</code> type defined in [Rudiments](https://github.com/propensive/rudiments/), which is just an
+alias for <code>Int &amp; Singleton</code>. If you are using Scala's erased definitions, both <code>CpuPerformance</code> and
+<code>Flops</code> may be made <code>erased trait</code>s to reduce the bytecode size slightly.</p>
+
+<p>With these definitions, we can now write <code>Mega(Flop) * Minute</code> to get a result with the dimensions
+"FLOPS-seconds", represented by the type, <code>Quantity[Flops[1] &amp; Seconds[1]]</code>.</p>
+
+<p>If we want to show the FLOPS value as <code>Text</code>, a symbolic name is required. This can be specified
+with a contextual instance of <code>UnitName[Flops[1]]</code>,</p>
+<pre>
+given UnitName[Flops[1]] = () =&gt; t"FLOPS"
+</pre>
+<p>which will allow <code>show</code> to be called on a quantity involving FLOPs.</p>
+
+<h3>Describing physical quantities</h3>
+
+<p>English provides many names for physical quantities, including the familiar base dimensions of
+<em>length</em>, <em>mass</em>, <em>time</em> and so on, as well as combinations of these, such as <em>velocity</em>,
+<em>acceleration</em> and <em>electrical resistance</em>.</p>
+
+<p>Definitions of names for many of these physical quantities are already defined, and will appear in
+error messages when a mismatch occurs.</p>
+<pre>
+scala&gt; Metre/Second + Metre/(Second*Second)
+
+quantitative: the left operand represents velocity, but the right operand represents acceleration;
+these are incompatible physical quantities
+</pre>
+<p>It is also possible to define your own, for example, here is the definition for "force":</p>
+<pre>
+erased given DimensionName[Units[1, Mass] &amp; Units[1, Length] &amp; Units[-2, Time], "force"] = erasedValue
+</pre>
+
+<p>The singleton type <code>"force"</code> is the provided name for any units corresponding to the dimensions,
+mass×length×time¯².</p>
+
+<h3>Substituting simplified units</h3>
+
+<p>While the SI base units can be used to describe the units of most physical quantities, there often
+exist simpler forms of their units. For example, the Joule, <code>J</code>, is equal to <code>kg⋅m²⋅s¯²</code>, and is
+much easier to write.</p>
+
+<p>By default, Quantitative will use the latter form, but it is possible to define alternative
+representations of units where these exist, and Quantitative will use these whenever a quantity is
+displayed. A contextual value can be defined, such as the following,</p>
+<pre>
+import gossamer.t
+
+given SubstituteUnits[Kilograms[1] &amp; Metres[2] &amp; Seconds[-2]](t"J")
+</pre>
+<p>and then a value such as, <code>2.8*Kilo(Joule)</code> will be rendered as <code>2800 J</code> instead of <code>2800 kg⋅m²⋅s¯²</code>.</p>
+
+<p>Note that this only applies if the quantity's units exactly match the type parameter of
+<code>SubstituteUnits</code>, and units such as Joule-seconds would still be displayed as <code>kg⋅m²⋅s¯¹</code>.</p>
+
+
+
+            <h3>License</h3>
+            <p>
+                Quantitative is copyright &copy; 2024 Jon Pretty &amp; Propensive
+                O&Uuml;, and is made available under the Apache 2.0 License.
+            </p>
+        </main>
+    </body>
+</html>
