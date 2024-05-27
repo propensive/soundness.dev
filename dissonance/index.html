@@ -1,0 +1,163 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Soundness: Dissonance</title>
+        <meta charset="utf-8" />
+        <link rel="stylesheet" href="/styles.css" />
+        <link rel="icon" type="image/x-icon" href="/images/logo2.svg" />
+    </head>
+    <body>
+        <nav>
+            <ul>
+                <li><a href="/">home</a></li>
+                <li>
+                    <a href="https://github.com/propensive/soundness"
+                        >contribute</a
+                    >
+                </li>
+                <li>
+                    <a href="https://discord.com/invite/MBUrkTgMnA">discuss</a>
+                </li>
+            </ul>
+        </nav>
+        <main>
+            <h2>Dissonance</h2>
+            <p class="intro">
+              Myers' diff algorithm for Scala
+            </p>
+            <h3>About</h3>
+            <p>
+                <img
+                    src="https://github.com/propensive/dissonance/raw/main/doc/logo.svg"
+                />
+
+                Dissonance implements Eugene Myers' diff algorithm in Scala as a pure function
+on immutable data structures. Using it is as simple as calling
+<code>diff(left, right)</code>, where <code>left</code> and <code>right</code> are sequences of like-typed data
+to be compared; the result is an instance of <code>Diff</code>, a sequence of additions,
+deletions and no-change nodes representing each item in the left and right
+sequence.</p>
+            <h3>Features</h3>
+            <ul>
+              <li>implements Myers' diff algorithm</li>
+              <li>can be used with any data type, not just strings</li>
+              <li>specify a custom comparison function enabling fine-grained merges on "similar" data</li>
+              <li>diffs are simple immutable structures of <code>Del</code>, <code>Ins</code> and <code>Par</code> nodes</li>
+            </ul>
+
+            <h3>Availability</h3>
+            <p>
+                Dissonance is available as a binary for Scala 3.4.0 and later,
+                from <a href="https://central.sonatype.com">Maven Central</a>.
+                To include it in an <code>sbt</code> build, use the coordinates:
+            </p>
+            <pre>libraryDependencies += "dev.soundness" % "dissonance-core" % "0.2.0"</pre>
+            <h3>Getting Started</h3>
+<p>Dissonance provides only a single method, <code>diff</code>, which takes a <code>left</code> and
+<code>right</code> parameter, both sequences of the same type, and generates a sequence of
+the edits required to transform the left sequence into the right sequence, a
+result of type <code>Diff</code>. Each element of the resultant sequence is either a <code>Par</code>
+value (for <em>parity</em>), corresponding to a value in both the left and right
+sequences, an <code>Ins</code> value (for <em>insertions</em>) which exists only in the right
+sequence, or a <code>Del</code> value (for <em>deletions</em>) which exists only in the left
+sequence.</p>
+
+<p>The naming of these enumeration cases corresponds to a translation of the left
+sequence into the right sequence, but could describe a translation from the
+right sequence to the left if the roles are reversed. The <code>Diff#flip</code> method
+can automatically reverse the translation.</p>
+
+<p>Each of the three possible <code>Edit</code> cases, <code>Ins</code>, <code>Del</code> and <code>Par</code> includes the
+relevant value, as well as the indices of that value in each sequence it exists
+in: for <code>Ins</code>, the right; for <code>Del</code>, the left, and for <code>Par</code> both a <code>left</code> and
+<code>right</code> index.</p>
+
+<h3>Custom equality</h3>
+
+<p>By default, elements of the left and right sequences will be considered <em>the
+same</em> (producing <code>Par</code> values) if they are equal according to Java's universal
+equality method, <code>AnyRef#equals</code>. However, other forms of equality (or
+similarity) may exist, and it may be useful to consider two elements to be <em>the
+same</em>, even if they are not equal according to <code>AnyRef#equals</code>. A common example
+would be if they had the same ID, even if their content is different.</p>
+
+<p>The <code>diff</code> method takes an optional third parameter, <code>compare</code>, of type
+<code>(ElemType, ElemType) -&gt; Boolean</code> which determines whether two elements are
+<em>the same</em> for the purposes of the diff.</p>
+
+<h3>Collation</h3>
+
+<p>Given a <code>Diff</code> instance, created from two sequences, its <code>collate</code> method can be
+used to group subsequences of changes together into changed and unchanged
+regions. For any given <em>diff</em> result, this collation can be done unambiguously:
+runs of adjacent <code>Par</code>s are grouped together into an <code>Unchanged</code> instance, and
+between each run will be one or more <code>Ins</code> and/or <code>Del</code> values which are grouped
+into a <code>Changed</code> instance, consisting of a sequence of deletions and a sequence of
+insertions.</p>
+
+<p>Conventionally, the diff algorithm will output deletions before insertions, but in
+terms of correctness, the order in which deletions and insertions are applied does
+not matter. The result of collation will always be an alternating sequence of
+<code>Changed</code> and <code>Unchanged</code> sections.</p>
+
+<h3>Deeper Diff</h3>
+
+<p><code>Diff</code> also provides a method, <code>rdiff</code>, which will use these collated changes and
+perform a further diff on each changed section which contains at least one insertion
+and at least one deletion, since some of these may be more usefully viewed as
+<em>substitutions</em> or replacements, rather than unrelated insertions and deletions. The
+<code>rdiff</code> method requires a <em>similarity</em> function, <code>(ElemType, ElemType) -> Boolean</code>,
+which can identify values in the left and right sequences which are similar (but
+which have already been identified as non-equal). These are thus presented as <code>Sub</code>
+nodes.</p>
+
+<p>Since the order in which each deletion or insertion is applied within a changed
+section does not affect correctness, each nested diff may decide to identify certain
+insertion/deletion pairs as "substitutes" and fit the remaining insertions and
+deletions around them.</p>
+
+<p>The result is an instance of <code>RDiff</code> containing a (now flattened) sequence of
+<code>Ins</code>s, <code>Del</code>s, <code>Par</code>s and <code>Sub</code>s. Note that all but <code>Sub</code> have the supertype,
+<code>Edit</code>, while all have the supertype, <code>Change</code>.</p>
+
+<p>Furthermore, <code>rdiff</code> has a second, optional, parameter, <code>subSize</code>, which may be used
+to automatically convert short, changed sections with an equal number of insertions
+and deletions, into a sequence of <code>Sub</code>s, provided they are less than <code>subSize</code>. The
+value defualts to <code>1</code>. So, as isolated insertion/deletion region of length <code>subSize</code>
+would become a series of <code>Sub</code>s, regardless of whether the similarity function returns
+<code>true</code> or <code>false</code>.</p>
+
+<h3>Applying a Diff</h3>
+
+<p>A <code>Diff</code> instance, say <code>diff</code>,  may be applied to a sequence, <code>seq</code>, with,</p>
+<pre>
+diff.applyTo(seq)
+</pre>
+<p>to produce a new sequence. This is performed lazily, so the result is a <code>LazyList</code>.</p>
+
+<p>By default, a <code>Par</code> "edit" will leave the element in the original sequence unchanged.
+However, <code>applyTo</code> has an optional second parameter, <code>update</code>, which can be provided
+to specify how <code>Par</code> edits should be handled. Of course, if the edit is a <code>Par</code>, the
+original and diff versions of element <em>should</em> be equal anyway, but may not be if,
+for example, the diff was constructed with a different "compare" function or the
+diff is being incorrectly applied to the wrong input.</p>
+
+<p>Three reasonable alternatives for <code>update</code> are:</p>
+<ul>
+<li>to ignore the value in the diff, and keep the original (the default),</li>
+<li>to ignore the original value and replace it with the value in the diff</li>
+<li>to check that the original and diff elements are equal, and fail if they are not</li>
+</ul>
+
+<p>But more involved possibilities are available which could "merge" the original and
+diff elements, or prefer one or the other.</p>
+
+
+            <h3>License</h3>
+            <p>
+                Dissonance is copyright &copy; 2024 Jon Pretty &amp; Propensive
+                O&Uuml;, and is made available under the Apache 2.0 License.
+            </p>
+        </main>
+    </body>
+</html>
