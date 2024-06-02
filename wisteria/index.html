@@ -72,7 +72,7 @@
                 To include it in an <code>sbt</code> build, use the coordinates:
             </p>
             <pre>
-libraryDependencies += "dev.soundness" % "wisteria-core" % "0.2.0"
+libraryDependencies += "dev.soundness" % "wisteria-core" % "0.3.0"
 </pre
             >
 
@@ -743,6 +743,32 @@ object Random extends ProductDerivation[Random]:
                 <code>Long => DerivationType</code> provides a suitable
                 implementation for the new typeclass.
             </p>
+
+	    <h3>Monadic Producer Product Typeclasses</h3>
+	    <p>
+	        Often your producer will return a type construct, like `Option` or `Either`,
+                for example:
+            </p>
+<pre>
+trait Parser[T]:
+  def parse(input: String): Either[Exception, T]
+</pre>
+
+<p>
+In this case there is a method called <code>constructWith</code>, which can be used in
+place of <code>construct</code>, and allows you to specify polymorphic <code>pure</code> and <code>bind</code>
+(a.k.a. <code>flatMap</code>) functions over your type constructor to help traverse
+producer typeclass results.</p>
+
+<p>Here is an example usage:</p>
+
+<pre>
+object Parser extends ProductDerivation[Parser]:
+  inline def join[DerivationType <: Product: ProductReflection]: Parser[DerivationType] = input =>
+    constructWith[DerivationType, Either]
+     ([InputType, OutputType] => _.flatMap,           // bind
+      [MonadicType] => Right(_),                      // pure
+      [FieldType] => context => context.parse(input))</pre>
 
             <h3>Deriving Sum Types</h3>
 
