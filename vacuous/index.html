@@ -1,0 +1,119 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Soundness: Vacuous</title>
+        <meta charset="utf-8" />
+        <link rel="stylesheet" href="/styles.css" />
+        <link rel="icon" type="image/x-icon" href="/images/logo2.svg" />
+    </head>
+    <body>
+        <nav>
+            <ul>
+                <li><a href="/">home</a></li>
+                <li>
+                    <a href="https://github.com/propensive/soundness"
+                        >contribute</a
+                    >
+                </li>
+                <li>
+                    <a href="https://discord.com/invite/MBUrkTgMnA">discuss</a>
+                </li>
+            </ul>
+        </nav>
+        <main>
+            <h2>Vacuous</h2>
+            <p class="intro">
+                A simple representation of optional values
+            </p>
+            <h3>About</h3>
+            <p>
+                <img
+                    src="https://github.com/propensive/vacuous/raw/main/doc/logo.svg"
+                />
+
+                Scala's <code>Option</code> is the traditional way to represent values which may be either
+                <em>present</em> (in which case a value is specified) or <em>absent</em>. <code>Option</code> is a
+                simple ADT, but union types, along with some helper methods, can provide much
+                better ergonomics in most circumstances. <em>Vacuous</em> offers an <code>Optional</code> type
+                which provides this functionality.
+            </p>
+            <h3>Features</h3>
+            <ul>
+
+                <li>Provides an implementation of optional values using union types</li>
+                <li>No need to wrap <em>present</em> values in <code>Some</code></li>
+                <li>Flattened representation, prohibiting ambiguous <code>Some(None)</code> representation</li>
+                <li>Lightweight <code>let</code>, <code>lay</code> and <code>or</code> methods cover <code>map</code>, <code>flatMap</code>, <code>fold</code>, <code>orElse</code> and <code>getOrElse</code></li>
+                <li>Performant inlined implementations of all critical methods</li>
+                <li>Especially convenient use case for default parameters</li>
+            </ul>
+            <h3>Availability</h3>
+            <p>
+                Vacuous is available as a binary for Scala 3.4.0 and later,
+                from <a href="https://central.sonatype.com">Maven Central</a>.
+                To include it in an <code>sbt</code> build, use the coordinates:
+            </p>
+            <pre>
+libraryDependencies += "dev.soundness" % "vacuous-core" % "0.1.0"</pre
+            >
+            <h3>Getting Started</h3>
+
+<h4>The <code>Optional</code> type</h4>
+
+<p>An optional value, which might be an instance of <code>ValueType</code>, or may be
+<em>absent</em>, may be given the type <code>Optional[ValueType]</code>. If it is absent, then it
+has the value, <code>Unset</code>, which is a singleton object. <code>Optional[ValueType]</code> is
+an alias for the union type, <code>ValueType | Unset.type</code>.</p>
+
+<p>Note that the declarations,</p>
+<pre>
+val value: Text = t"Hello world"
+</pre>
+<p>and,</p>
+<pre>
+val value: Optional[Text] = t"Hello world"
+</pre>
+<p>differ only in their types; the syntax of the expression is identical, and does
+not need to be wrapped with another factory method, like <code>Some</code>.</p>
+
+<p>Since union types are unordered sets of types, nesting two <code>Optional</code>s, for
+example in <code>Optional[Optional[Int]]</code> expands to
+<code>Int | Unset.type | Unset.type</code>, which is identical to <code>Int | Unset.type</code>. And
+this is the same as <code>Optional[Int]</code>. While there is nothing to prevent nesting
+one <code>Optional</code> within another <code>Optional</code>, it's impossible to distinguish
+between the types, and impossible for an <code>Unset</code> value to be considered
+<em>present</em> rather than <em>absent</em>; it is the definition of absence.</p>
+
+<h4><code>or</code>, <code>let</code> and <code>lay</code></h4>
+
+<p>An <code>Optional[Text]</code> value may seem very similar to a <code>Text</code> value, but the
+possibility that it might be <code>Unset</code> makes it impossible to use any methods
+defined on <code>Text</code> on an <code>Optional[Text]</code>, since those methods are not
+applicable to just one of the possible values of the type, <code>Unset</code>. So several
+convenience methods are provided to make <code>Optional</code>s easy to work with.</p>
+
+<p>The method <code>or</code> replaces the <code>Unset</code> value with another value, eliminating the
+optionality from the type. This is equivalent to <em>both</em> <code>getOrElse</code> and
+<code>orElse</code> on <code>Option</code>. This equivalence comes from the lack of nesting of
+<code>Optional</code> values.</p>
+
+<p>Similarly, <code>let</code> applies a lambda to the <em>present</em> values, and leaves the
+<em>absent</em> value unchanged. It is equivalent to both <code>map</code> and <code>flatMap</code> on
+<code>Option</code>s.</p>
+
+<p>Finally, <code>lay</code> combines <code>or</code> and <code>let</code> in a single, two-parameter method: the
+alternative value for <code>Unset</code> is specified first, followed by the lambda
+mapping the <em>present</em> values. This is equivalent to <code>fold</code> on an <code>Option</code>.</p>
+
+<p>These method names were deliberately chosen to be short, as they are intended
+to be used frequently and are rarely the most interesting part of an
+expression.</p>
+
+            <h3>License</h3>
+            <p>
+                Vacuous is copyright &copy; 2024 Jon Pretty &amp; Propensive
+                O&Uuml;, and is made available under the Apache 2.0 License.
+            </p>
+        </main>
+    </body>
+</html>
