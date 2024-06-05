@@ -1,0 +1,198 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Soundness: Guillotine</title>
+        <meta charset="utf-8" />
+        <link rel="stylesheet" href="/styles.css" />
+        <link rel="icon" type="image/x-icon" href="/images/logo2.svg" />
+    </head>
+    <body>
+        <nav>
+            <ul>
+                <li><a href="/">home</a></li>
+                <li>
+                    <a href="https://github.com/propensive/soundness"
+                        >contribute</a
+                    >
+                </li>
+                <li>
+                    <a href="https://discord.com/invite/MBUrkTgMnA">discuss</a>
+                </li>
+            </ul>
+        </nav>
+        <main>
+            <h2>Guillotine</h2>
+            <p class="intro">
+A small library for executing stuff
+            </p>
+            <h3>About</h3>
+            <p>
+                <img
+                    src="https://github.com/propensive/guillotine/raw/main/doc/logo.svg"
+                />
+
+<p>Guillotine makes it easy to work with shell processes in Scala, with simple interpolation-based
+definitions of commands, and type-based interpretation of their output. For example, a directory
+listing may be obtained with <code>sh"ls $path".exec[List[String]]()</code>.</p>
+
+            </p>
+            <h3>Features</h3>
+            <ul>
+
+<li>lightweight syntax for expressing shell commands, e.g. <code>sh"ls"</code></li>
+<li>typeclasses define how different types are substituted into commands</li>
+<li>compile-time checking of command syntax, with correct handling of quotes and substitutions</li>
+<li>typeclass-based execution strategies for commands</li>
+<li>shell command results may be interpreted as <code>String</code>, <code>Int</code>, <code>Unit</code> or streamed as <code>LazyList</code></li>
+<li>processes may be started synchronously or asynchronously</li>
+<li>commands may be piped to other commands with the <code>|</code> operator, or applied like functions</li>
+            </ul>
+            <h3>Availability</h3>
+            <p>
+                Guillotine is available as a binary for Scala 3.5.0-RC1 and later,
+                from <a href="https://central.sonatype.com">Maven Central</a>.
+                To include it in an <code>sbt</code> build, use the coordinates:
+            </p>
+            <pre>
+libraryDependencies += "dev.soundness" % "guillotine-core" % "0.1.0"</pre
+            >
+            <h3>Getting Started</h3>
+
+<h3>Commands</h3>
+
+<p>Shell commands are created using the <code>sh""</code> interpolator, which will interpret (at compiletime) a
+command and its arguments, correctly interpreting single- and double-quoted arguments and escaped
+characters. Unclosed quotes will result in a compile error.</p>
+
+<p>Substitutions of values of a variety of different types may be made into an <code>sh</code> interpolator, and
+may be read as either "single-argument" (such as <code>String</code> or <code>Int</code>) or "multi-argument" (such as
+<code>List[Int]</code> or <code>Set[String]</code>).</p>
+
+<p>Multi-argument substitutions will be interpreted as multiple arguments to the shell command unless
+they are enclosed within quotes, in which case they will be interpreted as a space-separated
+string.</p>
+
+<p>Substitutions should normally be surrounded by spaces, otherwise they will be prepended or appended
+to adjacent arguments.</p>
+
+<h4>Piping</h4>
+
+<p>Two commands may be combined using the pipe operator (<code>|</code>), for example,</p>
+<pre>
+sh"cat /home/work/file" | sh"grep $query" | sh"wc -l"
+</pre>
+<p>which is equivalent to the single shell command, <code>cat /home/work/file | grep $query | wc -l</code>, with
+the appropriate substitution of <code>query</code> being made.</p>
+
+<p>While this expression will seem very familiar from a shell-command perspective, it may also be
+written in function application style as,</p>
+<pre>
+sh"wc -l"(sh"grep $query"(sh"cat /home/work/file"))
+</pre>
+<p>and the two versions are equivalent.</p>
+
+<h4>Substitutions</h4>
+
+<p>Substitutions of a variety of different types may be made into an interpolated <code>sh</code> command. Any
+type for which a <code>gossamer.Show</code> typeclass exists will be inserted as a single parameter, and
+any sequence of one of these types will be inserted as multiple arguments. A <code>Command</code> instance
+may also be substituted into another, for example,</p>
+<pre>
+val echo = sh"echo Hello World"
+sh"sh -c '$echo'"
+</pre>
+<p>where the quotes are required around <code>'$echo'</code> so that the command is passed to <code>sh -c</code> as a
+single argument, rather than multiple arguments (of which only the first would be used).</p>
+
+<h4>Environment</h4>
+
+<p>Execution requires an <code>Env</code> instance specifying a map of environment variables and a working
+directory as a <code>String</code>, and should be specified as a contextual value, for example,</p>
+<pre>
+given Env(Map("PATH" -> "/usr/bin:/usr/sbin"), "/home/work")
+</pre>
+<p>however it is common to use the <code>enclosing</code> environment. That is, to pass the environment in which
+the JVM was started to its subprocess, ensuring that processes started by Guillotine behave as they
+would if started directly from the shell. There may, however, be security implications when doing
+this, so it must be explicitly enabled with:</p>
+<pre>
+given Environment = environments.enclosing
+</pre>
+
+<h3>Execution</h3>
+
+<p>Two methods are provided for starting execution of a process: <code>fork</code> and <code>exec</code>, both taking a type
+parameter which determines the type of the return value, and may also affect how execution is
+handled.</p>
+
+<pre>
+val result: String = sh"echo Hello World".exec[String]()
+</pre>
+
+<p>The <code>exec</code> method will return a value synchronously, when that value is ready. This may happen only
+when the process completes execution, if the entire output is caputured, for example if the
+return-type is <code>String</code>, or may happen earlier if a streaming return type, such as
+<code>LazyList[String]</code>, is specified.</p>
+
+<p>The <code>fork</code> method always starts the process asynchronously, and returns an instance of <code>Process[T]</code>,
+where <code>T</code> is the specified return type.</p>
+
+<pre>
+val process: Process[String] = sh"locate lostfile".fork[String]()
+</pre>
+
+<p><code>Process</code> implements a few useful methods for working with a running process:</p>
+<ul>
+ <li> <code>await()</code> which waits until the process completes, and returns its result of type <code>T</code></li>
+ <li> <code>abort()</code> which stops execution, by delegating to Java's <code>Process#destroy</code></li>
+ <li> <code>kill()</code> which stops execution, by delegating to Java's <code>Process#destroyForcibly</code></li>
+ <li> <code>pid</code> which returns a <code>Pid</code> instance representing the OS-dependent process ID</li>
+ <li> <code>stdout</code> and <code>stderr</code> methods for directly accessing the process's output streams</li>
+ <li> <code>stdin(in)</code> which accepts a stream of bytes (<code>LazyList[IArray[Byte]]</code>) as standard input to the
+   process</li>
+</ul>
+<p>The synchronous <code>exec[T]()</code> method is always equivalent to <code>fork[T]().await()</code>.</p>
+
+</h3>Result interpretation</h3>
+
+<p>Different shell processes may behave differently in how their results should be interpreted. Those
+differences include the interpretation of the exit status—where different nonzero codes may be
+interpreted as different types of failure—and which stream contains the important output, <code>STDOUT</code>
+or <code>STDERR</code>.</p>
+
+<p>How these differences are interpreted is determined by the choice of return type: nonzero return
+types may be presented as thrown exceptions, or interpreted as a different sort of "success".
+Furthermore, the return type will determine whether the result may be return before the shell
+process terminates, or whether (in the case of a streaming response) it may be returned earlier.</p>
+
+<p>The <code>Executor[T]</code> typeclass provides support for producing different return types. Executors for
+the following types are provided:</p>
+<ul>
+<li> <code>String</code>, which interprets the response using the system encoding and returns a value after the
+  process terminates</li>
+<li> <code>LazyList[String]</code>, which provides a stream of lines of text (without the newline character)</li>
+<li> <code>LazyList[IArray[Byte]]</code>, which returns a stream of byte arrays</li>
+<li> <code>Unit</code>, to be used when the result is not important</li>
+<li> <code>ExitStatus</code>, an enumeration of <code>Ok</code> or <code>Fail(status)</code> where <code>status</code> is a nonzero positive
+  integer</li>
+</ul>
+
+<p>Custom executors may be provided by implementing the <code>Executor</code> trait with the single abstract
+method,</p>
+<pre>
+def interpret(process: java.lang.Process): T
+</pre>
+<p>or by mapping across an existing <code>Executor</code>, for example,</p>
+<pre>
+given Executor[Int] = summon[Executor[String]].map(_.toInt)
+</pre>
+<p>since all <code>Executor</code>s are functors.</p>
+
+            <h3>License</h3>
+            <p>
+                Guillotine is copyright &copy; 2024 Jon Pretty &amp; Propensive
+                O&Uuml;, and is made available under the Apache 2.0 License.
+            </p>
+        </main>
+    </body>
+</html>
