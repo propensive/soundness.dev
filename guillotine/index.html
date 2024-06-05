@@ -106,10 +106,10 @@ single argument, rather than multiple arguments (of which only the first would b
 
 <h4>Environment</h4>
 
-<p>Execution requires an <code>Env</code> instance specifying a map of environment variables and a working
+<p>Execution requires an <code>Environment</code> instance specifying a map of environment variables and a working
 directory as a <code>String</code>, and should be specified as a contextual value, for example,</p>
 <pre>
-given Env(Map("PATH" -> "/usr/bin:/usr/sbin"), "/home/work")
+given Environment(Map("PATH" -> "/usr/bin:/usr/sbin"), "/home/work")
 </pre>
 <p>however it is common to use the <code>enclosing</code> environment. That is, to pass the environment in which
 the JVM was started to its subprocess, ensuring that processes started by Guillotine behave as they
