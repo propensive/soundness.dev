@@ -1,0 +1,197 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Soundness: Iridescence</title>
+        <meta charset="utf-8" />
+        <link rel="stylesheet" href="/styles.css" />
+        <link rel="icon" type="image/x-icon" href="/images/logo2.svg" />
+    </head>
+    <body>
+        <nav>
+            <ul>
+                <li><a href="/">home</a></li>
+                <li>
+                    <a href="https://github.com/propensive/soundness"
+                        >contribute</a
+                    >
+                </li>
+                <li>
+                    <a href="https://discord.com/invite/MBUrkTgMnA">discuss</a>
+                </li>
+            </ul>
+        </nav>
+        <main>
+            <h2>Iridescence</h2>
+            <p class="intro">
+                Sophisticated representation of color
+            </p>
+            <h3>About</h3>
+            <p>
+                <img
+                    src="https://github.com/propensive/iridescence/raw/main/doc/logo.svg"
+                />
+
+<p><em>Iridescence</em> implements several algorithms for working with colors represented in different forms.</p>
+            </p>
+            <h3>Features</h3>
+            <ul>
+<li>represents colors using a variety of different color models</li>
+<li>work with colors in RGB, HSV, CMY, CMYK, HSL, CIELAB and XYZ</li>
+<li>convert between any colors</li>
+<li>utilize color profiles (where necessary)</li>
+<li>provides a standard palette of named colors</li>
+<li>print colors as CSS, Hex or ANSI</li>
+<li>brighten, lighten, darken and blend colors</li>
+<li>calculate perceptual deltas between colors</li>
+            </ul>
+            <h3>Availability</h3>
+            <p>
+                Iridescence is available as a binary for Scala 3.4.0 and later,
+                from <a href="https://central.sonatype.com">Maven Central</a>.
+                To include it in an <code>sbt</code> build, use the coordinates:
+            </p>
+            <pre>
+libraryDependencies += "dev.soundness" % "iridescence-core" % "0.1.0"</pre
+            >
+            <h3>Getting Started</h3>
+
+
+<p><em>Iridescence</em> provides seven different ways of representing colors:</p>
+<ul>
+<li><code>Srgb</code>: <a href="https://en.wikipedia.org/wiki/SRGB">sRGB</a></li>
+<li><code>Xyz</code>: <a href="https://en.wikipedia.org/wiki/CIE_1931_color_space">CIE 1931 XYZ</a></li>
+<li><code>Cielab</code>: <a href="https://en.wikipedia.org/wiki/CIELAB_color_space">L*a*b*</a> or CIELAB</li>
+<li><code>Cmy</code>: <a href="https://en.wikipedia.org/wiki/CMY_color_model">CMY</a></li>
+<li><code>Cmyk</code>: <a href="https://en.wikipedia.org/wiki/CMYK_color_model">CMYK</a></li>
+<li><code>Hsl</code>:< a href="https://en.wikipedia.org/wiki/HSL_and_HSV">HSL</a></li>
+<li><code>Hsv</code>: <a href="https://en.wikipedia.org/wiki/HSL_and_HSV">HSV</a></li>
+</ul>
+
+<p>Each color model uses either three or four continuous coordinates, all represented in Iridescence as <code>Double</code>s
+in the unit interval (0 ≤ *c* ≤ 1), to describe an apparently full spectrum of colors perceived by the human
+eye.</p>
+
+<p>Given the complex nature of sight and color, different models make different tradeoffs in their representations
+of different colors. While sRGB is the most direct representation of the colored light emitted by a computer
+monitor, and indeed the most common representation for computers, CMY and CMYK are more common in printing.</p>
+
+<p>Meanwhile, the HSL and HSV representations representations use the natural qualititative properties of hue,
+saturation, lightness and brightness, and the XYZ and CIELAB color spaces are derived empirically. CIELAB
+attempts to maintain the property that the Euclidean distance between two colors is proportional to the
+perceptual difference between those colors, as determined by experimentation.</p>
+
+<p>The particular color model should be chosen according to the requirements of the particular task.</p>
+
+<h3>A Quick Example</h3>
+
+<pre>
+import soundness.*
+
+given profile = profiles.Ultralume50
+
+val pink: Cielab = colors.Ivory.cielab.mix(colors.DarkMagenta.cielab)
+val palePink: Srgb = pink.srgb.hsv.tint(0.5).srgb
+println(s"${color.ansiFg24}Hello World!")
+</pre>
+
+<h3>Types</h3>
+
+<p>Iridescence provides case classes to immutably represent each of the seven color models, above. Colors in one
+representation can be directly converted into many of the other representations, and the remaining conversions
+can be performed indirectly.</p>
+
+<p>In general, every color representation provides the <code>Color#srgb</code> method to convert it to an <code>Srgb</code> value.
+Conversely, the <code>Srgb</code> type provides the methods <code>cmy</code>, <code>cmyk</code>, <code>cielab</code>, <code>xyz</code>, <code>hsv</code> and <code>hsl</code> to convert to
+these alternative representations.</p>
+
+<p>While it would be possible to provide an n×n set of methods for converting between any pair of representations,
+conversions which rely on an unspecified intermediate representation (for example converting between HSL and
+CMYK) are generally <em>not</em> provided unless the intermediate representation is a necessary step in the
+calculation. This is to make it clear when conversions are happening.</p>
+
+<p>For example, the methods <code>Hsl#srgb</code> and <code>Srgb#xyz</code> both exist, but <code>Hsl#xyz</code> is not implemented. However,
+<code>Srgb#cielab</code> <em>is</em> provided, even though the conversion is made via an intermediate XYZ value.</p>
+
+<p>Here are some examples:</p>
+<pre>
+val DeepPink: Srgb = Srgb(1, 0.078, 0.576)
+val Gold: Hsv = Srgb(1, 0.843, 0).hsv
+val Gold2: Cmyk = Gold.srgb.cmyk
+</pre>
+
+<h3>Palettes</h3>
+
+<p>The <code>webColors</code> object provides a standard palette of about 140 named colors defined in sRGB space.</p>
+
+<h3>Color profiles</h3>
+
+<p>Certain color representations rely on additional information that characterizes the conditions under which the
+colors are encoded, and this information is necessary for conversions between certain color spaces.</p>
+
+<p>For example, to convert from <code>Srgb</code> to <code>Cielab</code> requires a profile. Profiles are provided through the <code>Profile</code>
+type, and several are provided in the <code>profiles</code> object. These should be specified, implicitly or explicitly
+with each conversion, like so:</p>
+
+<pre>
+val color = DeepPink.cielab(using profiles.MidMorningDaylight)
+</pre>
+<p>or,</p>
+<pre>
+given Profile = profiles.CoolFluorescent
+val color = LawnGreen.xyz
+</pre>
+
+<p>For generality, conversions to <code>Srgb</code> <em>always</em> require a profile to be given (even for conversions where it is
+not used). This restriction may be lifted later. A good default profile to use is the <code>Daylight</code> profile.</p>
+<pre>
+given Profile = profiles.Daylight
+</pre>
+
+<h3>Color methods</h3>
+
+<p>Additional methods are provided on certain color types for producing new colors from old. In general, these
+methods are particular to the color model being used.</p>
+
+<p>For example, the methods <code>saturate</code>, <code>desaturate</code>, <code>pure</code> and <code>rotate</code> (for changing the hue) are provided on
+<code>Hsl</code> and <code>Hsv</code> types, while <code>Hsv</code> additionally provides <code>shade</code>, <code>tint</code> and <code>tone</code> methods. These latter
+methods take <code>black</code> and/or <code>white</code> parameters to specify the amount of shading, tinting or toning to be
+applied.</p>
+
+<p><code>Cielab</code> provides a <code>delta</code> method for comparing two colors (returning a <code>Double</code> in the unit interval), and the
+<code>mix</code> method for combining two colors. <code>Cielab#mix</code> takes another <code>Cielab</code> color as its first parameter, and
+a mix ratio (again, in the unit interval) as an optional second parameter. If left unspecified, it defaults to
+the midpoint between the two colors.</p>
+
+<p>Use of these methods might typically involve converting a color to the model which defines them, then applying
+them as necessary, before converting back. For example,</p>
+<pre>
+webColors.IndianRed.hsv.tone(0.2, 0.4).srgb
+</pre>
+
+<h3>Serialization</h3>
+
+<p>Different formats, languages and protocols will represent colors as strings in a number of different ways.
+Iridescence provides serialization methods to the following formats:</p>
+<ul>
+<li>24-bit ANSI foreground and background escape codes,</li>
+<li>RGB CSS, in the form <code>rgb(100, 78, 12)</code>,</li>
+<li>HSL CSS, in the form <code>hsl(310, 12%, 84%)</code>,</li>
+<li>12-bit and 24-bit hexadecimal, e.g. <code>#afc</code> or <code>#ffed00</code></li>
+</ul>
+<p>These are available on the <code>Srgb</code> type, with the exception of <code>Hsl#css</code>.</p>
+
+<h3>Limitations</h3>
+
+<p>There is no support for transparency.</p>
+
+
+
+
+            <h3>License</h3>
+            <p>
+                Iridescence is copyright &copy; 2024 Jon Pretty &amp; Propensive
+                O&Uuml;, and is made available under the Apache 2.0 License.
+            </p>
+        </main>
+    </body>
+</html>
