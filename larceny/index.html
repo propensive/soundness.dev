@@ -23,15 +23,23 @@
         <main>
             <h2>Larceny</h2>
             <p class="intro">
-                Sophisticated representation of color
+A Scala 3 compiler plugin for testing compiletime errors
             </p>
             <h3>About</h3>
             <p>
                 <img
-                    src="https://github.com/propensive/iridescence/raw/main/doc/logo.svg"
+                    src="https://github.com/propensive/larceny/raw/main/doc/logo.svg"
                 />
 
-<p>A Scala 3 compiler plugin for testing compiletime errors</p>
+Unlike runtime errors, compilation errors prevent successful compilation, which
+makes them harder to test, since we can't even compile the units tests we want
+to write and run to test them! <em>Larceny</em> makes it possible to write those tests. Code which would normally
+fail compilation, for any reason (provided it parses as well-formed Scala) is
+permitted inside certain blocks of code, but instead of being compiled and run,
+instead returns a list of compilation errors, as runtime values, which are
+perfect for testing.
+
+
             </p>
             <h3>Features</h3>
             <ul>
