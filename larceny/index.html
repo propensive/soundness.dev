@@ -1,0 +1,189 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Soundness: Larceny</title>
+        <meta charset="utf-8" />
+        <link rel="stylesheet" href="/styles.css" />
+        <link rel="icon" type="image/x-icon" href="/images/logo2.svg" />
+    </head>
+    <body>
+        <nav>
+            <ul>
+                <li><a href="/">home</a></li>
+                <li>
+                    <a href="https://github.com/propensive/soundness"
+                        >contribute</a
+                    >
+                </li>
+                <li>
+                    <a href="https://discord.com/invite/MBUrkTgMnA">discuss</a>
+                </li>
+            </ul>
+        </nav>
+        <main>
+            <h2>Larceny</h2>
+            <p class="intro">
+                Sophisticated representation of color
+            </p>
+            <h3>About</h3>
+            <p>
+                <img
+                    src="https://github.com/propensive/iridescence/raw/main/doc/logo.svg"
+                />
+
+<p>A Scala 3 compiler plugin for testing compiletime errors</p>
+            </p>
+            <h3>Features</h3>
+            <ul>
+<li> suppresses compilation errors on ordinary code blocks</li>
+<li> code must at least parse, but all errors will be lifted to runtime values</li>
+<li> allows compilation errors to be tested in unit testing frameworks</li>
+<li> unit tests on compilation errors can be written in the most natural way</li>
+            </ul>
+            <h3>Availability</h3>
+            <p>
+                Larceny is available as a binary for Scala 3.5.0-RC1 and later,
+                from <a href="https://central.sonatype.com">Maven Central</a>.
+                To include it in an <code>sbt</code> build, use the coordinates:
+            </p>
+            <pre>
+libraryDependencies += "dev.soundness" % "larceny-plugin" % "0.1.0"</pre
+            >
+            <h3>Getting Started</h3>
+
+<p>Larceny is a compiler plugin, and can be included in a compilation with the
+<code>-Xplugin:larceny.jar</code> parameter to <code>scalac</code>:</p>
+<pre>
+scalac -d bin -Xplugin:larceny.jar -classpath larceny.jar *.scala
+</pre>
+
+<p>The compiler plugin identifies code blocks whose compilation errors should be
+suppressed, which are inside a <code>demilitarize</code> block (using any
+valid Scala syntax), for example:</p>
+<pre>
+package com.example
+
+import larceny.*
+
+@main def run(): Unit =
+  demilitarize("Hello world".substring("5"))
+
+  demilitarize:
+    val x = 8
+    println(x.missingMethod)
+</pre>
+
+<p>Here, the code inside each <code>demilitarize</code> block will never compile:
+the first, because <code>substring</code> takes an <code>Int</code> as a parameter, and the second
+because <code>missingMethod</code> is not a member of <code>Int</code>.</p>
+
+<p>But despite this, if the Larceny plugin is enabled, then the code will compile.</p>
+
+<p>Any invalid code that is <em>not</em> within a <code>demilitarize</code> block will
+still result in the expected compilation errors.</p>
+
+<p>The compilation error from each <code>demilitarize</code> block will be
+returned (in a <code>List</code>) from each block. We could adjust the code to see them,
+like so:</p>
+<pre>
+@main def run(): Unit =
+  val errors = demilitarize:
+    "Hello world".substring("5")
+
+  errors.foreach:
+    case CompileError(ordinal, message, code, position, offset) =>
+      println(s"[$id] Found error '$message' in the code '$code' with offset $offset")
+</pre>
+
+<p>The parameters of <code>CompileError</code> need some explanation:</p>
+<ul>
+<li><code>ordinal</code> is the ordinal identifier representing the type of error; the Scala
+  compiler defines about 200 such error types (though some occur more
+  frequently than others)</li>
+<li><code>message</code> is the human-readable error message text that would be output by
+  the compiler</li>
+<li><code>code</code> is the fragment of code which would be marked as problematic (in an
+  IDE, this would usually be done with a wavy red underline)</li>
+<li><code>position</code> is the location of the code from the start of the source file</li>
+<li><code>offset</code> is the number of characters from the start of <code>code</code> that is
+  marked as the exact point of the error</li>
+</ul>
+
+<p>Taking the second example above,</p>
+<pre>
+demilitarize:
+  val x = 8
+  println(x.missingMethod)
+</pre>
+the <code>message</code> would be:
+<pre>
+value missingMethod is not a member of Int
+</pre>
+<p>while the <code>code</code> value would be <code>x.missingMethod</code> (note that the surrounding
+<code>println</code> is not considered erroneous), and the <code>offset</code> would be <code>2</code>. The
+value <code>2</code> is because the erroneous code begins <code>x.</code>, but the point of the error
+is considered to be the <code>m</code> of <code>missingMethod</code>, which is character <code>2</code>.</p>
+
+<p>The error IDs are defined in the Scala compiler and correspond to an
+enumeration of values. For convenience, these values have been copied into the
+<code>CompileErrorId</code> enumeration, and can be accessed by the <code>id</code> method of
+<code>CompileError</code>.</p>
+
+<p><code>CompileErrorId</code> is also an extractor on <code>CompileError</code>, so it's possible to
+write:</p>
+<pre>
+demilitarize(summon[Ordering[Exception]]) match
+  case ErrorId(ErrorId.MissingImplicitArgumentID) => "expected"
+  case _                                          => "unexpected"
+</pre>
+
+<h3>Implementation</h3>
+
+<p>Here are the details of how Larceny works. It should not be necessary to
+understand its implementation for normal usage, but as experimental software,
+it may behave unexpectedly, and this explanation may help to diagnose
+misbehavior.</p>
+
+<p>Larceny runs on each source file before typechecking, but after parsing. Any
+blocks named <code>demilitarize</code> found in the the untyped AST will trigger
+a new and independent compilation of the same source file (with the same
+classpath, but without the Larceny plugin) from <em>within</em> the main compilation.</p>
+
+<p>Since the <code>demilitarize</code> blocks should contain compile errors, this
+child compilation is expected to fail, but its compilation errors will be
+captured. Each compilation error which is positioned within a
+<code>demilitarize</code> block will be converted to static code which constructs
+a new <code>CompileError</code> instance, and inserts it into the <code>demilitarize</code>
+block, in place of entire erroneous contents.</p>
+
+<p>If there are multiple <code>demilitarize</code> blocks in the same source file,
+some errors which occur in earlier phases of compilation may suppress later
+phases from running, and the errors from those later phases will not be
+captured during the first compilation. Larceny will rerun the compiler as
+many times as necessary to capture errors from later phases, each time
+removing more code which would have precluded these later phases.</p>
+
+<p>The main compilation is then allowed to continue to typechecking, which will
+only see the <code>CompileError</code> constructions, not the original code. As long as
+there are no compilation errors <em>outside</em> of a <code>demilitarize</code> block,
+compilation should succeed. When the code is run, each <code>demilitarize</code>
+block will simply return a list of <code>CompileError</code>s.</p>
+
+<h3>Testing Frameworks</h3>
+
+<p>Larceny should work with any Scala unit testing framework or library. For
+example, with [Probably](https://github.com/propensive/probably/), we could
+write a compile error test with:</p>
+<pre>
+test(t"cannot sort data without an Ordering"):
+  demilitarize(data.sorted).head.message
+.assert(_.startsWith("No implicit Ordering"))
+</pre>
+            <h3>License</h3>
+            <p>
+                Larceny is copyright &copy; 2024 Jon Pretty &amp; Propensive
+                O&Uuml;, and is made available under the Apache 2.0 License.
+            </p>
+        </main>
+    </body>
+</html>
