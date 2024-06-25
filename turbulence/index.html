@@ -1,0 +1,242 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Soundness: Turbulence</title>
+        <meta charset="utf-8" />
+        <link rel="stylesheet" href="/styles.css" />
+        <link rel="icon" type="image/x-icon" href="/images/logo2.svg" />
+    </head>
+    <body>
+        <nav>
+            <ul>
+                <li><a href="/">home</a></li>
+                <li>
+                    <a href="https://github.com/propensive/soundness"
+                        >contribute</a
+                    >
+                </li>
+                <li>
+                    <a href="https://discord.com/invite/MBUrkTgMnA">discuss</a>
+                </li>
+            </ul>
+        </nav>
+        <main>
+            <h2>Turbulence</h2>
+            <p class="intro">Simple tools for working with data streams in <code>LazyList</code>s</p>
+            <h3>About</h3>
+            <p>
+                <img
+                    src="https://github.com/propensive/turbulence/raw/main/doc/logo.svg"
+                />
+
+<p>
+<em>Turbulence</em> provides a few useful methods for working with <code>LazyList</code>s for streaming
+</p>
+
+            </p>
+            <h3>Features</h3>
+            <ul>
+              <li>provides several stream-related operations on <code>LazyList</code>s</li>
+              <li>can multiplex several streams into a single stream</li>
+              <li>can cluster together short sequences of events which happen within a predefined period of time</li>
+            </ul>
+            <h3>Availability</h3>
+            <p>
+                Turbulence is available as a binary for Scala 3.5.0-RC1 and later,
+                from <a href="https://central.sonatype.com">Maven Central</a>.
+                To include it in an <code>sbt</code> build, use the coordinates:
+            </p>
+            <pre>libraryDependencies += "dev.soundness" % "turbulence-core" % "0.2.0"</pre>
+            <h3>Getting Started</h3>
+
+<h3>Operations on <code>LazyList</code>s</h3>
+
+</h4><code>Funnel</code>s</h4>
+
+<p>A <code>Funnel</code> receives asynchronous events, potentially from multiple threads, and puts them into a
+<code>LazyList</code></p>
+
+<p>For example,</p>
+<pre>
+val funnel: Funnel[Int] = Funnel[Int]()
+funnel.put(2)
+Future(funnel.put(6))
+val events: LazyList[Int] = funnel.stream
+</pre>
+
+<p>Note that evaluation of the <code>Funnel#stream</code> method constructs a <code>LazyList</code> which consumes events,
+and should be called exactly once. Later releases of Turbulence will change the API to avoid this
+trap.</p>
+
+<h4>Clustering</h4>
+
+<p>An event stream provided by a <code>LazyList[T]</code> may yield events irregularly, often with several events
+happening at the same time. A simple event-handling loop, which performs a slow operation, such as,</p>
+<pre>
+stream.foreach: event =&gt;
+  slowOperation(event)
+</pre>
+<p>will incur a time cost for every event in the stream; so if the operation takes one second and ten
+events arrive at around the same time, it will take about ten seconds from the first event arriving
+until the last event is processed.</p>
+
+<p>Sometimes it can be quicker to process events in a batch, or the results of processing earlier
+events can be invalidated by the arrival of later events. In these cases, clustering the events on
+a stream can be useful.</p>
+
+<p>The <code>LazyList#cluster</code> extension method can transform a <code>LazyList[T]</code> into a <code>LazyList[List[T]]</code>. It
+will group together sequences of events arriving with less than a specified gap in time between
+them.</p>
+
+<p>For example,</p>
+<pre>
+stream.cluster(1000).foreach: events =&gt;
+  slowOperation(events.last)
+</pre>
+<p>will effectively ignore all but the last event, but will not start processing an event until 1000ms
+has passed without any new events.</p>
+
+<p>As a more complete example, consider the event stream, <code>stream</code>, which produces events <code>0</code>-<code>9</code> at
+the times shown in the "Time" column. </p>
+<table>
+<thead>
+<tr>
+<th>Event</th><th>Time</th><th>Gap</th><th><code>stream</code></th><th><code>stream.cluster(10)</code></th><th><code>stream.cluster(100)</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>0</code></td><td><code>4ms</code></td><td></td><td><code>0 @ 4ms</code></td><td></td><td></td><td>
+</tr>
+<tr>
+<td><code>1</code></td><td><code>8ms</code></td><td><code>4ms</code></td><td><code>1 @ 8ms</code></td><td><code>{0,1} @ 18ms</code></td><td></td>
+</tr>
+<tr>
+<td><code>2</code></td><td><code>15ms</code></td><td><code>7ms</code></td><td><code>2 @ 15ms</code></td><td><code>{2} @ 25ms</code></td><td></td>
+</tr>
+<tr>
+<td><code>3</code></td><td><code>26ms</code></td><td><code>11ms</code></td><td><code>3 @ 26ms</code></td><td><code>{3} @ 36ms</code></td><td></td>
+</tr>
+<tr>
+<td><code>4</code></td><td><code>75ms</code></td><td><code>49ms</code></td><td><code>4 @ 75ms</code></td><td></td><td></td>
+</tr>
+<tr>
+<td><code>5</code></td><td><code>80ms</code></td><td><code>5ms</code></td><td><code>5 @ 80ms</code></td><td></td><td></td>
+</tr>
+<tr>
+<td><code>6</code></td><td><code>85ms</code></td><td><code>5ms</code></td><td><code>6 @ 85ms</code></td><td></td><td></td>
+</tr>
+<tr>
+<td><code>7</code></td><td><code>90ms</code></td><td><code>5ms</code></td><td><code>7 @ 90ms</code></td><td><code>{4,5,6,7} @ 100ms</code></td><td><code>{1,2,3,4,5,6,7} @ 190ms</code></td>
+</tr>
+<tr>
+<td><code>8</code></td><td><code>203ms</code></td><td><code>113ms</code></td><td><code>8 @ 203ms</code></td><td><code>{8} @ 213ms</code></td><td><code>{8} @ 303ms</code></td>
+</tr>
+<tr>
+<td><code>9</code></td><td><code>304ms</code></td><td><code>101ms</code></td><td><code>9 @ 304ms</code></td><td><code>{8} @ 308ms</code></td><td><code>{9} @ 308ms</code></td>
+</tr>
+<tr>
+<td><code>END</code></td><td><code>308ms</code></td><td><code>4ms</code></td><td></td><td></td><td></td>
+</tr>
+</tbody>
+</table>
+<p>The event streams <code>stream.cluster(10)</code> and <code>stream.cluster(100)</code> will produce results at different
+times. Note that event <code>0</code> is not received on <code>stream.cluster(100)</code> until <code>190ms</code> after it is
+produced, and likewise event <code>4</code> is not received on <code>stream.cluster(10)</code> until <code>25ms</code> after it
+fires.</p>
+
+<p>In the worst-case scenario, a stream steadily producing events with a gap slightly shorter than the
+cluster interval will never produce a value! To mitigate this possibility, an optional second
+parameter can be provided which specifies the maximum number of events to include in a single
+clustered event, for example,</p>
+<pre>
+stream.cluster(100, 10)
+</pre>
+
+<p>The <code>LazyList#cluster</code> extension method expects a parameter of the contextual <code>Timekeeping</code> type.</p>
+
+<h4>Multiplexing</h4>
+
+<p>Multiple <code>LazyList</code> streams may be combined into a single stream by multiplexing them. The
+extension method <code>LazyList.multiplex</code> takes a variable number of <code>LazyList</code> arguments to construct
+a new <code>LazyList</code> from two or more existing <code>LazyList</code>s, for example:</p>
+<pre>
+val combinedStream = LazyList.multiplex(source1, source2, source3)
+</pre>
+
+<p>The type parameter of the resultant <code>LazyList</code> will be the least upper-bound of that of the input
+streams.</p>
+
+<h4>Rate-limiting</h4>
+
+<p>Often a stream will produce results faster than desired if it is actively consumed. The
+<code>LazyList#rate</code> method will guarantee a minimum amount of time passes between consecutive values.
+If the elapsed time since the previous element already exceeds the minimum, it will be yielded
+immediately.</p>
+
+<p>For example,</p>
+<pre>
+LazyList.from(1).rate(100)
+</pre>
+will count from <code>1</code>, yielding approximately ten numbers per second.
+
+<p>Note that a rate-limited <code>LazyList</code> which has already been partially or completely evaluated will
+evaluate without any delay on subsequent reads.</p>
+
+<h4>Mutable Multiplexing</h4>
+
+<p>It may be desirable to add or remove streams from the set being multiplexed. This is possible with
+a <code>Multiplexer</code> instance, which takes two type parameters: <code>K</code>, the type of the keys with which
+streams will be associated, and <code>T</code>, the type of the elements in the resultant stream.</p>
+
+<p>New streams may be added to the <code>Multiplexer</code> with the <code>Multiplexer#add</code> method, which takes a key
+and a stream, and removed with the <code>Multiplexer#remove</code> method, taking just the key. For example,</p>
+<pre>
+val multiplexer = Multiplexer[Text, Int]()
+multiplexer.add(t"Fibonacci", fib(0, 1).rate(500))
+multiplexer.add(t"Naturals", LazyList.from(1).rate(350))
+multiplexer.stream.take(10).foreach(println(_))
+multiplexer.remove(t"Fibonacci")
+multiplexer.stream.take(10).foreach(println(_))
+multiplexer.close()
+</pre>
+
+<h4>Tap</h4>
+
+<p>Sometimes it's useful to have direct control over when a <code>LazyList</code> is yielding values and when
+it is "paused", using an external trigger. This functionality is provided by a <code>Tap</code>, a mutable
+object which defines two methods, <code>open()</code> and <code>close()</code>, and holds the tap's current state.</p>
+
+<p>Given a <code>LazyList[T]</code>, <code>stream</code>, the <code>regulate</code> extension method may be used to specify a <code>Tap</code>
+which can control it.</p>
+
+<p>For example,</p>
+<pre>
+val tap = Tap()
+def regulatedStream = stream.regulate(tap)
+</pre>
+
+<p>Elsewhere, perhaps in another thread, <code>tap.close()</code> and <code>tap.open()</code> may be called to pause or
+resume output on the <code>LazyList</code>. Any events which arise while the <code>Tap</code> is closed will be buffered,
+and emitted when it is re-opened. Accessing <code>isEmpty</code>, <code>head</code> or <code>tail</code> on the <code>LazyList</code> will, of
+course, block while the tap is closed.</p>
+
+<h4>Pulsar</h4>
+
+<p>A <code>Pulsar</code> provides a regular stream of <code>Unit</code> values and a predefined rate. It may be created
+simply with the <code>pulsar</code> extension method on the <code>LazyList</code> object, taking a time duration as its
+only parameter, for example,</p>
+<pre>
+LazyList.pulsar(1000L).foreach:
+  unit =&gt; println("Hello")
+</pre>
+<p>will print <code>Hello</code> once per second, forever.</p>
+
+            <h3>License</h3>
+            <p>
+                Turbulence is copyright &copy; 2024 Jon Pretty &amp; Propensive
+                O&Uuml;, and is made available under the Apache 2.0 License.
+            </p>
+        </main>
+    </body>
+</html>
