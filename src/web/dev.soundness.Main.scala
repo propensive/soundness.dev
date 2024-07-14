@@ -2,28 +2,12 @@ package dev.soundness
 
 import scala.collection.mutable as scm
 
-import anticipation.*
-import contingency.*
-import digression.*
-import escapade.*
-import eucalyptus.*
-import fulminate.*
-import gesticulate.*
-import gossamer.*
+import soundness.*
 import harlequin.*
-import hellenism.*
-import hieroglyph.*
 import honeycomb.*
-import nettlesome.*
-import parasite.*
 import punctuation.*
-import rudiments.*
 import scintillate.*
-import serpentine.*
-import spectacular.*
-import turbulence.*
 import telekinesis.{HttpRequest as _, HttpResponse as _, *}
-import vacuous.*
 
 import logFormats.ansiStandard
 import classloaders.scala
@@ -32,7 +16,7 @@ import charDecoders.utf8
 import sanitization.skip
 import orphanDisposal.cancel
 import threadModels.platform
-import hierarchies.simple
+import serpentine.hierarchies.simple
 import stdioSources.virtualMachine.ansi
 import htmlRenderers.scalaSyntax
 
@@ -98,7 +82,7 @@ def server(): Unit =
   .within:
     supervise(tcp"8080".serve[Http](handle))
 
-class Service() extends Servlet(handle)
+class Service() extends JavaServlet(handle)
 
 def handle(using HttpRequest): HttpResponse[?] =
   quash:
