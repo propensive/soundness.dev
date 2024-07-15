@@ -38,13 +38,13 @@ main li p { margin: 0; padding: 0; }
   nav { height: 12.5em; background-size: 80vw; background-position-y: 2em; }
 }
 
-@media (prefers-color-scheme: dark) {
+/*@media (prefers-color-scheme: dark) {
   body { background-color: #111; color: #cccccc; }
   h1 { color: #eee; }
   nav { background-image: url('images/logo-dark.svg'); }
   .intro { color: #ccc; }
   b { color: #fff; }
-}
+}*/
 
 .error { color: #cc0033; }
 .number { color: #cc3366; }
