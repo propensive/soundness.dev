@@ -3,7 +3,6 @@ package dev.soundness
 import scala.collection.mutable as scm
 
 import soundness.*
-import harlequin.*
 import honeycomb.*
 import punctuation.*
 import scintillate.*
@@ -23,10 +22,6 @@ import htmlRenderers.scalaSyntax
 given Realm = realm"soundness"
 given Message is Loggable = safely(supervise(Log.route(Out))).or(Log.silent)
 given Online = Online
-
-given AppError is Unchecked = ###
-
-case class AppError(detail: Message) extends Error(detail)
 
 def page(content: Html[Flow]*): HtmlDoc =
   HtmlDoc(Html
@@ -76,13 +71,19 @@ def server(): Unit =
     case ConcurrencyError(reason) =>
       Out.println(m"There was a concurrency error")
       ExitStatus.Fail(2).terminate()
-    case AppError(message) =>
-      Out.println(message)
-      ExitStatus.Fail(1).terminate()
+
   .within:
     supervise(tcp"8080".serve[Http](handle))
 
 class Service() extends JavaServlet(handle)
+
+object Data:
+  private val cache: scm.HashMap[HttpUrl, HtmlDoc] = scm.HashMap()
+
+  def apply(project: Text): HtmlDoc raises HttpError raises MarkdownError =
+    val url = url"https://raw.githubusercontent.com/propensive/$project/main/doc/basics.md"
+    cache.establish(url)(page((H2(project.capitalize) +: Markdown.parse(url.get().as[Text]).html)*))
+
 
 def handle(using HttpRequest): HttpResponse[?] =
   quash:
@@ -113,9 +114,7 @@ def handle(using HttpRequest): HttpResponse[?] =
         else HttpResponse(NotFound(page(H1(t"Not found"), P(t"The image was not found."))))
 
       case % / Name(project) =>
-        val url = url"https://raw.githubusercontent.com/propensive/$project/main/doc/basics.md"
-        val markdown = Markdown.parse(url.get().as[Text])
-        HttpResponse(page(markdown.html*))
+        HttpResponse(Data(project))
 
       case _ =>
         HttpResponse(page(Div, H1(t"Not found"), P(t"This page does not exist.")))
