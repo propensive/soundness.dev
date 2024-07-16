@@ -15,7 +15,7 @@ import charDecoders.utf8
 import textSanitizers.skip
 import orphanDisposal.cancel
 import threadModels.platform
-import serpentine.hierarchies.simple
+import pathHierarchies.simple
 import stdioSources.virtualMachine.ansi
 import htmlRenderers.scalaSyntax
 
@@ -63,11 +63,11 @@ def home = page
       Div.library
        (A(href = unsafely(% / Name(library)))(Img(src = url"https://raw.githubusercontent.com/propensive/$library/main/doc/logo.svg")),
         H3(library.capitalize),
-        P(quash { case _: HttpError => t"" }.within(Slogan(library)))))))
+        P(mend { case _: HttpError => t"" }.within(Slogan(library)))))))
 
 @main
 def server(): Unit =
-  quash:
+  mend:
     case ConcurrencyError(reason) =>
       Out.println(m"There was a concurrency error")
       ExitStatus.Fail(2).terminate()
@@ -86,7 +86,7 @@ object Data:
 
 
 def handle(using HttpRequest): HttpResponse[?] =
-  quash:
+  mend:
     case MarkdownError(detail) =>
       HttpResponse(page(Aside, H1(t"Bad markdown")))
 
