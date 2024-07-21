@@ -4,6 +4,8 @@ import scala.collection.mutable as scm
 
 import soundness.*
 import honeycomb.*
+import jacinta.*
+import merino.*
 import punctuation.*
 import scintillate.*
 import telekinesis.{HttpRequest as _, HttpResponse as _, *}
@@ -11,8 +13,6 @@ import telekinesis.{HttpRequest as _, HttpResponse as _, *}
 import logFormats.ansiStandard
 import classloaders.scala
 import charEncoders.utf8
-import charDecoders.utf8
-import textSanitizers.skip
 import orphanDisposal.cancel
 import threadModels.platform
 import pathHierarchies.simple
@@ -22,8 +22,15 @@ import htmlRenderers.scalaSyntax
 given Realm = realm"soundness"
 given Message is Loggable = safely(supervise(Log.route(Out))).or(Log.silent)
 given Online = Online
+erased given ConcurrencyError is Unchecked = ###
+erased given JsonParseError is Unchecked = ###
+erased given JsonError is Unchecked = ###
 
-def page(content: Html[Flow]*): HtmlDoc =
+given InitError is Fatal = error => ExitStatus.Fail(1)
+
+case class InitError(msg: Message) extends Error(msg)
+
+def page(aside: Html[Flow], content: Html[Flow]*): HtmlDoc =
   HtmlDoc(Html
    (Head
      (Title(t"Soundness.dev"),
@@ -35,12 +42,14 @@ def page(content: Html[Flow]*): HtmlDoc =
        (Li(A(href = %)(t"home")),
         Li(A(href = url"https://github.com/propensive/soundness")(t"contribute")),
         Li(A(href = url"https://discord.com/invite/MBUrkTgMnA")(t"discuss")))),
-      Main(content),
+      Aside(aside),
+      content,
       Footer(t"© Copyright 2024 Propensive"))))
 
-val libraries = List
+val projects = Set
  (t"kaleidoscope", t"quantitative", t"dendrology", t"contingency", t"vacuous", t"iridescence",
-  t"turbulence", t"symbolism", t"nettlesome", t"larceny", t"metamorphose", t"wisteria").sorted
+  t"turbulence", t"symbolism", t"nettlesome", t"larceny", t"metamorphose", t"wisteria",
+  t"capricious", t"dissonance")
 
 object Slogan:
   private val cache: scm.HashMap[Text, Text] = scm.HashMap()
@@ -48,7 +57,8 @@ object Slogan:
     url"https://raw.githubusercontent.com/propensive/$library/main/doc/slogan.md".get().as[Text]
 
 def home = page
- (H1
+ (Aside,
+  H1
    (t"Correctness, security and performance",
     Br,
     t"Invariant from prototype to production"),
@@ -59,45 +69,93 @@ def home = page
          B(t"aesthetic"), t" code. Projects bult on Soundness are ", B(t"safe"), t", ",
          B(t"maintainable"), t" and ", B(t"sound"))),
   Main
-   (Div(libraries.map: library =>
+   (Div(projects.to(List).sorted.map: library =>
       Div.library
        (A(href = unsafely(% / Name(library)))(Img(src = url"https://raw.githubusercontent.com/propensive/$library/main/doc/logo.svg")),
         H3(library.capitalize),
         P(mend { case _: HttpError => t"" }.within(Slogan(library)))))))
 
 @main
-def server(): Unit =
-  mend:
-    case ConcurrencyError(reason) =>
-      Out.println(m"There was a concurrency error")
-      ExitStatus.Fail(2).terminate()
-
-  .within:
-    supervise(tcp"8080".serve[Http](handle))
-
+def server(): Unit = supervise(tcp"8080".serve[Http](handle))
 class Service() extends JavaServlet(handle)
 
 object Data:
   private val cache: scm.HashMap[HttpUrl, HtmlDoc] = scm.HashMap()
+  lazy val repos: Map[Text, Repo] =
+    tend:
+      case _: HttpError => InitError(m"Could not access GitHub")
+    .within:
+      GitHub.repos(t"propensive").indexBy(_.name)
 
   def apply(project: Text): HtmlDoc raises HttpError raises MarkdownError =
-    val url = url"https://raw.githubusercontent.com/propensive/$project/main/doc/basics.md"
-    cache.establish(url)(page((H2(project.capitalize) +: Markdown.parse(url.get().as[Text]).html)*))
+    val intro = url"https://raw.githubusercontent.com/propensive/$project/main/doc/intro.md"
+    val basics = url"https://raw.githubusercontent.com/propensive/$project/main/doc/basics.md"
+    val status = url"https://raw.githubusercontent.com/propensive/$project/main/doc/status.md"
+    val loc = url"https://raw.githubusercontent.com/propensive/$project/main/doc/lines.md"
 
+    cache.establish(basics):
+      val repo = repos(project)
+      val name = project.capitalize
+      val modules = repo.modules()
+      val tags = repo.tags().view.filter(MavenCentral.published(t"dev.soundness", t"$project-${modules.prim.or(t"core")}", _))
+      val latest: Optional[Tag] = tags.take(1).to(List).prim
+
+      val published = latest.lay(Nil): tag =>
+        modules.flatMap: module =>
+          val size = MavenCentral.binarySize(t"dev.soundness", t"$project-$module", tag).or(ByteSize(0))
+          List
+           (H3.module(t"$project-$module"),
+            H4(t"Maven"),
+            P(t"dev.soundness:$project-$module:${tag.name}"),
+            H4(t"Fury"),
+            P(t"include $project/$module"),
+            H4(t"Binary size"),
+            P(t"${size.long/1024}kiB"))
+
+      val introBody = Markdown.parse(intro.get().as[Text])
+      val body = Markdown.parse(basics.get().as[Text])
+      val outline = htmlRenderers.outline.convert(body.nodes)
+      val github = A(href = url"https://github.com/propensive/$project")(t"$name on GitHub")
+      val discord = A(href = url"https://discord.gg/MBUrkTgMnA")(t"Discuss $name on Discord")
+      val twitter = A(href = url"https://x.com/propensive")(t"Follow @propensive on X")
+
+      val aside = Div
+       (H3(t"Contents"),
+        outline,
+        H3(t"About ${project.capitalize}"),
+        H4(t"Size"),
+        P(repo.size.show, t"kB", safely(t", ${loc.get().as[Text]} lines of Scala").or(t"")),
+        if repo.watchers > 10 then List(H4(t"Watchers"), P(repo.watchers.show)) else Nil,
+        H4(t"Status"),
+        P(status.get().as[Text]),
+        H4(t"License"),
+        P(A(href = url"https://www.apache.org/licenses/LICENSE-2.0")(t"Apache 2.0")),
+        H4(t"Keywords"),
+        P(repo.topics.flatMap { word => List(Span.topic(word.unkebab.join(t"\u00a0")), t" ") }),
+        H4(t"Latest release"),
+        latest.lay(List(P(t"not yet available"))) { tag => P(tag.name) },
+        H3(t"Modules"),
+        published,
+        H3(t"Links"),
+        Ul.links(Li.github(github), Li.discord(discord), Li.x(twitter)))
+
+      val logo = Img.logo(src = url"https://raw.githubusercontent.com/propensive/$project/main/doc/logo.svg")
+      page(aside, Article((H2(project.capitalize) +: logo +: (introBody.html ++ body.html))*))
 
 def handle(using HttpRequest): HttpResponse[?] =
+
   mend:
     case MarkdownError(detail) =>
-      HttpResponse(page(Aside, H1(t"Bad markdown")))
+      HttpResponse(page(Div, Article(H2(t"Error"), P(t"The source contained bad markdown content."))))
 
     case ClasspathError(path) =>
-      HttpResponse(page(Aside, H1(t"Path $path not found")))
+      HttpResponse(page(Div, Article(H2(t"Path Not Found"), P(t"The path was not found"))))
 
     case PathError(path, reason) =>
-      HttpResponse(page(Aside, P(t"$path is not valid because $reason")))
+      HttpResponse(page(Div, Article(H2(t"Path Error"), P(t"$path is not valid because $reason"))))
 
-    case HttpError(_, _) =>
-      HttpResponse(page(Aside, P(t"Could not download the remote page")))
+    case error@HttpError(_, _) =>
+      HttpResponse(page(Div, Article(H2(t"Error"), P(t"Could not download the remote page"))))
 
   .within:
     request.path match
@@ -111,10 +169,17 @@ def handle(using HttpRequest): HttpResponse[?] =
         val resource = Classpath / p"images" / Name(image)
 
         if resource.exists() then HttpResponse(resource)
-        else HttpResponse(NotFound(page(H1(t"Not found"), P(t"The image was not found."))))
+        else HttpResponse(NotFound(page(Div, Article(H2(t"Not Found"), P(t"The image was not found.")))))
 
-      case % / Name(project) =>
+      case % / Name(project) if projects.contains(project) =>
         HttpResponse(Data(project))
 
       case _ =>
-        HttpResponse(page(Div, H1(t"Not found"), P(t"This page does not exist.")))
+        HttpResponse(page(Div, Article(H2(t"Not Found"), P(t"This page does not exist."))))
+
+case class Commit(sha: Text)
+case class Tag(name: Text, commit: Commit)
+
+case class Owner(login: Text, id: Int):
+  def repos(): List[Repo] raises HttpError =
+    url"https://api.github.com/users/$login/repos".get(GitHub.headers*).as[Json].as[List[Repo]]
