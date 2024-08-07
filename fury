@@ -5,7 +5,10 @@ repo propensive/cataclysm
 repo propensive/hellenism
 repo propensive/punctuation
 repo propensive/honeycomb
+repo propensive/cellulose
+repo propensive/amok
 repo propensive/jacinta
+repo propensive/xylophone
 repo propensive/harlequin
 
 target soundness/web
@@ -14,5 +17,5 @@ project soundness
   module web
     compiler  scala
     sources   src/web
-    include   scintillate/server scintillate/servlet honeycomb/core cataclysm/core eucalyptus/ansi hellenism/core punctuation/html harlequin/md jacinta/core
+    include   scintillate/server scintillate/servlet honeycomb/core cataclysm/core eucalyptus/ansi hellenism/core punctuation/html harlequin/md jacinta/core cellulose/core xylophone/core amok/web
     main      dev.soundness.server
