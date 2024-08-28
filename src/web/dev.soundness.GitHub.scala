@@ -3,7 +3,6 @@ package dev.soundness
 import soundness.*
 import jacinta.*
 import merino.*
-import ambience.*
 import telekinesis.{HttpRequest as _, HttpResponse as _, *}
 
 import environments.virtualMachine
@@ -49,3 +48,12 @@ case class Repo
   def modules(): List[Text] raises HttpError raises JsonError =
     val url = url"https://api.github.com/repos/${owner.login}/$name/contents/etc"
     url.get(GitHub.headers*).as[Json].as[List[Json]].map(_.name.as[Text])
+
+  def raw: HttpUrl = url"https://raw.githubusercontent.com/${owner.login}/$name"
+
+case class Commit(sha: Text)
+case class Tag(name: Text, commit: Commit)
+
+case class Owner(login: Text, id: Int):
+  def repos(): List[Repo] raises HttpError =
+    url"https://api.github.com/users/$login/repos".get(GitHub.headers*).as[Json].as[List[Repo]]

@@ -3,21 +3,26 @@ package dev.soundness
 import scala.collection.mutable as scm
 
 import soundness.*
-import honeycomb.*
+import honeycomb.{Sub as _, Del as _, Ins as _, *}
 import jacinta.*
+import xylophone.*
+import amok.*
 import merino.*
-import punctuation.*
 import scintillate.*
 import telekinesis.{HttpRequest as _, HttpResponse as _, *}
 
 import logFormats.ansiStandard
 import classloaders.scala
 import charEncoders.utf8
+import charDecoders.utf8
 import orphanDisposal.cancel
 import threadModels.platform
 import pathHierarchies.simple
 import stdioSources.virtualMachine.ansi
-import htmlRenderers.scalaSyntax
+import textSanitizers.skip
+
+given (using Tactic[XmlParseError]) => HtmlConverter = HtmlConverter(ScalaRenderer, JavaRenderer,
+    AmokRenderer, mathMlRenderer, monoRenderer)
 
 given Realm = realm"soundness"
 given Message is Loggable = safely(supervise(Log.route(Out))).or(Log.silent)
@@ -30,12 +35,69 @@ given InitError is Fatal = error => ExitStatus.Fail(1)
 
 case class InitError(msg: Message) extends Error(msg)
 
+val count = Counter(0)
+
+case class Transform
+    (`match`: Selection,
+     before:  Optional[Text],
+     after:   Optional[Text],
+     replace: Optional[Text]):
+
+  def apply(text: Text): Text = `match`.findIn(text).lay(text): (start, end) =>
+    val replacement = t"${before.or(t"")}${replace.or(text.slice(Ordinal.zerary(start) ~ Ordinal.natural(end)))}${after.or(t"")}"
+    t"${text.s.substring(0, start).nn}$replacement${text.s.substring(end).nn}"
+
+case class Fragment
+    (syntax:    Text,
+     highlight: List[Highlight],
+     error:     List[Highlight],
+     caution:   List[Highlight],
+     transform: Optional[Transform])
+
+case class Selection(start: Text, end: Optional[Text]):
+  def findIn(text: Text): Optional[(Int, Int)] =
+    val startIndex = text.s.indexOf(start.s)
+
+    if startIndex < 0 then Unset else
+      end.lay((startIndex, startIndex + start.length)): rangeEnd =>
+        val endIndex = text.s.indexOf(rangeEnd, startIndex + start.length)
+        if endIndex < 0 then Unset else (startIndex, endIndex + rangeEnd.length)
+
+object Selection:
+  given Decoder[Selection] =
+    case r"$start(.*)\.\.$end(.*)" => Selection(start, end)
+    case other                     => Selection(other, Unset)
+
+case class Highlight(selection: Selection, caption: Optional[Text]):
+  def rangeIn(text: Text, style: Markup.Style): Optional[Range] =
+    selection.findIn(text).let { case (start, end) => Range(start, end, style, caption) }
+
+case class Range(start: Int, end: Int, style: Markup.Style, caption: Optional[Text]):
+  def length: Int = end - start
+
+object Markup:
+  enum Style:
+    case Erroneous, Highlight, Caution
+
+  export Style.*
+
+case class Markup(tokens: List[SourceToken], style: Markup.Style, caption: Optional[Text])
+
+def monoRenderer = new Renderer(t"mono"):
+  def render(meta: Optional[Text], content: Text): Seq[Html[Flow]] = List(Div.mono(Div.amok(Pre(content))))
+
+def mathMlRenderer: Renderer raises XmlParseError = new Renderer(t"mathml"):
+  def render(meta: Optional[Text], content: Text): Seq[Html[Flow]] =
+    List(HtmlXml(Xml.parse(content)))
+
+
 def page(aside: Html[Flow], content: Html[Flow]*): HtmlDoc =
   HtmlDoc(Html
    (Head
      (Title(t"Soundness.dev"),
       Meta(charset = enc"UTF-8"),
       Link(rel = Rel.Stylesheet, href = % / p"styles.css"),
+      Link(rel = Rel.Stylesheet, href = % / p"amok.css"),
       Link(rel = Rel.Icon, href = % / p"images" / p"logo2.svg")),
     Body
      (Nav(Ul
@@ -49,7 +111,7 @@ def page(aside: Html[Flow], content: Html[Flow]*): HtmlDoc =
 val projects = Set
  (t"kaleidoscope", t"quantitative", t"dendrology", t"contingency", t"vacuous", t"iridescence",
   t"turbulence", t"symbolism", t"nettlesome", t"larceny", t"metamorphose", t"wisteria",
-  t"capricious", t"dissonance")
+  t"capricious", t"dissonance", t"escritoire", t"gossamer", t"abacist", t"ethereal")
 
 object Slogan:
   private val cache: scm.HashMap[Text, Text] = scm.HashMap()
@@ -91,6 +153,7 @@ object Data:
     val intro = url"https://raw.githubusercontent.com/propensive/$project/main/doc/intro.md"
     val basics = url"https://raw.githubusercontent.com/propensive/$project/main/doc/basics.md"
     val status = url"https://raw.githubusercontent.com/propensive/$project/main/doc/status.md"
+    val slogan = url"https://raw.githubusercontent.com/propensive/$project/main/doc/slogan.md"
     val loc = url"https://raw.githubusercontent.com/propensive/$project/main/doc/lines.md"
 
     cache.establish(basics):
@@ -106,7 +169,11 @@ object Data:
           List
            (H3.module(t"$project-$module"),
             H4(t"Maven"),
-            P(t"dev.soundness:$project-$module:${tag.name}"),
+            P(Span.mark(), Span.hover(t"pkg:maven/dev.soundness"), t"""/$project-$module@${tag.name}"""),
+            H4(t"Gradle"),
+            P(Span.mark(), Span.hover(t"dev.soundness"), t":$project-$module:${tag.name}"),
+            H4(t"sbt"),
+            P(Span.mark(), Span.hover(t"\"dev.soundness\""), t""" % "$project-$module" % "${tag.name}""""),
             H4(t"Fury"),
             P(t"include $project/$module"),
             H4(t"Binary size"),
@@ -123,8 +190,10 @@ object Data:
        (H3(t"Contents"),
         outline,
         H3(t"About ${project.capitalize}"),
+        H4(t"Description"),
+        P(slogan.get().as[Text]),
         H4(t"Size"),
-        P(repo.size.show, t"kB", safely(t", ${loc.get().as[Text]} lines of Scala").or(t"")),
+        P(repo.size.show, t"kB repository", safely(t"; ${loc.get().as[Text]} lines of code").or(t"")),
         if repo.watchers > 10 then List(H4(t"Watchers"), P(repo.watchers.show)) else Nil,
         H4(t"Status"),
         P(status.get().as[Text]),
@@ -134,19 +203,24 @@ object Data:
         P(repo.topics.flatMap { word => List(Span.topic(word.unkebab.join(t"\u00a0")), t" ") }),
         H4(t"Latest release"),
         latest.lay(List(P(t"not yet available"))) { tag => P(tag.name) },
-        H3(t"Modules"),
+        H3(t"Modules for Scala 3.5.0"),
         published,
         H3(t"Links"),
         Ul.links(Li.github(github), Li.discord(discord), Li.x(twitter)))
 
       val logo = Img.logo(src = url"https://raw.githubusercontent.com/propensive/$project/main/doc/logo.svg")
+      erased given XmlParseError is Unchecked = ###
       page(aside, Article((H2(project.capitalize) +: logo +: (introBody.html ++ body.html))*))
 
-def handle(using HttpRequest): HttpResponse[?] =
 
+
+def handle(using HttpRequest): HttpResponse[?] =
   mend:
     case MarkdownError(detail) =>
       HttpResponse(page(Div, Article(H2(t"Error"), P(t"The source contained bad markdown content."))))
+
+    case XmlParseError(line, column) =>
+      HttpResponse(page(Div, Article(H2(t"Error"), P(t"The source contained bad XML."))))
 
     case ClasspathError(path) =>
       HttpResponse(page(Div, Article(H2(t"Path Not Found"), P(t"The path was not found"))))
@@ -158,28 +232,22 @@ def handle(using HttpRequest): HttpResponse[?] =
       HttpResponse(page(Div, Article(H2(t"Error"), P(t"Could not download the remote page"))))
 
   .within:
-    request.path match
-      case % =>
-        HttpResponse(home)
-
-      case % / p"styles.css" =>
-        HttpResponse(Classpath / p"styles.css")
-
+     request.path match
+      case %                 => HttpResponse(home)
+      case % / p"styles.css" => HttpResponse(Classpath / p"styles.css")
+      case % / p"amok.css"   => HttpResponse(Classpath / p"amok" / p"styles.css")
       case % / p"images" / Name(image) =>
         val resource = Classpath / p"images" / Name(image)
 
-        if resource.exists() then HttpResponse(resource)
-        else HttpResponse(NotFound(page(Div, Article(H2(t"Not Found"), P(t"The image was not found.")))))
+        if resource.exists() then HttpResponse(resource) else
+          HttpResponse
+           (NotFound(page(Div, Article(H2(t"Not Found"), P(t"The image was not found.")))))
+
+      case % / p"sample" =>
+        HttpResponse(page(Div, Article(Markdown.parse(Classpath / p"example.md").html)))
 
       case % / Name(project) if projects.contains(project) =>
         HttpResponse(Data(project))
 
       case _ =>
         HttpResponse(page(Div, Article(H2(t"Not Found"), P(t"This page does not exist."))))
-
-case class Commit(sha: Text)
-case class Tag(name: Text, commit: Commit)
-
-case class Owner(login: Text, id: Int):
-  def repos(): List[Repo] raises HttpError =
-    url"https://api.github.com/users/$login/repos".get(GitHub.headers*).as[Json].as[List[Repo]]

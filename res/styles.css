@@ -1,7 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,100;0,300;0,400;0,700;0,900;1,100;1,300;1,400;1,700;1,900&display=swap');
 @import url("https://fonts.googleapis.com/css2?family=Trispace:wght@100..800&display=swap");
 
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; text-size-adjust: none; }
 body { margin: 0; font-family: Lato; font-weight: 300; line-height: 1.75; font-size: min(15px, calc(1.2vw + 4px)); color: #666666; font-variation-settings: "MONO" 0; }
 b { color: #444444; font-weight: 500; }
 a { color: #0aa000ff; text-decoration: none; }
@@ -34,7 +34,7 @@ aside h3 { color: black; font-size: 1.1em; font-weight: 700; margin-top: 2em; }
 aside h3.module { font-family: Trispace; font-weight: 400; font-size: 0.9em; margin: 1.5em 0 0 0; }
 aside h4 { color: black; font-size: 0.8em; font-weight: 500; margin: 1em 0 0.2em; text-transform: uppercase; }
 aside p { text-align: left; font-family: Trispace; font-size: 0.8em; font-weight: 300; margin: -0.3em 0 0.5em 0; }
-aside div { position: absolute; width: min(280px, 31vw); margin-top: 0; overflow-y: scroll; padding: 0 0 3vh 0; height: 97vh; }
+aside div { position: absolute; width: min(280px, 31vw); margin-top: 0; padding: 0 0 3vh 0; height: 97vh; }
 ul { list-style-type: none; padding-left: 2em; }
 aside ul { font-size: 0.7rem; list-style-type: none; list-style-position: inside; padding-left: 0; margin: 0; }
 aside ul li { line-height: 1.2em; padding: 0.5em 0 0 1em; }
@@ -57,6 +57,7 @@ p .mark::after { content: '⇠⬩⇢'; color: #bbb; }
 p:hover .mark::after { content: ''; }
 
 @media (max-device-width: 480px) {
+  body { font-size: 2em; }
   nav { height: 12.5em; background-size: 80vw; background-position-y: 2em; }
 }
 
@@ -69,7 +70,8 @@ p:hover .mark::after { content: ''; }
 }*/
 
 @media (max-device-width: 640px), (max-width: 640px) {
-  body { font-size: 1em; }
+  body { font-size: 2em; }
+  main div { grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); font-size: 1.3em; }
   aside { margin-left: -480px; }
   pre { margin: 1rem -1rem 1rem -1rem; }
   article { padding-left: 0; width: 90vw; }
