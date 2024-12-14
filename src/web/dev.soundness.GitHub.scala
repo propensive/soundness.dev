@@ -1,12 +1,12 @@
 package dev.soundness
 
-import soundness.*
 import merino.*
+import soundness.*
 
-import environments.virtualMachine
 import dynamicJsonAccess.enabled
-import strategies.throwUnsafely
+import environments.virtualMachine
 import errorDiagnostics.stackTraces
+import strategies.throwUnsafely
 
 object GitHub:
   val base = url"https://api.github.com"
