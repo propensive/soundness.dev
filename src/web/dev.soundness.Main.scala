@@ -2,14 +2,15 @@ package dev.soundness
 
 import scala.collection.mutable as scm
 
-import soundness.*
-import honeycomb.{Sub as _, Del as _, Ins as _, *}
-import jacinta.*
-import xylophone.*
-import amok.*
-import merino.*
+import soundness.{HttpResponse as _, *}
 import scintillate.*
-import telekinesis.{HttpRequest as _, HttpResponse as _, *}
+import honeycomb.{Sub as _, Del as _, Ins as _, *}
+//import serpentine.`/`
+//import jacinta.*
+import xylophone.*
+//import amok.*
+//import merino.*
+import strategies.throwUnsafely
 
 import logFormats.ansiStandard
 import classloaders.scala
@@ -17,9 +18,9 @@ import charEncoders.utf8
 import charDecoders.utf8
 import orphanDisposal.cancel
 import threadModels.platform
-import pathHierarchies.simple
 import stdioSources.virtualMachine.ansi
 import textSanitizers.skip
+import errorDiagnostics.stackTraces
 
 given (using Tactic[XmlParseError]) => HtmlConverter = HtmlConverter(ScalaRenderer, JavaRenderer,
     AmokRenderer, mathMlRenderer, monoRenderer)
@@ -31,28 +32,28 @@ erased given ConcurrencyError is Unchecked = ###
 erased given JsonParseError is Unchecked = ###
 erased given JsonError is Unchecked = ###
 
-given InitError is Fatal = error => ExitStatus.Fail(1)
+given InitError is Fatal = error => Exit.Fail(1)
 
-case class InitError(msg: Message) extends Error(msg)
+case class InitError(msg: Message)(using Diagnostics) extends Error(msg)
 
 val count = Counter(0)
 
 case class Transform
-    (`match`: Selection,
-     before:  Optional[Text],
-     after:   Optional[Text],
-     replace: Optional[Text]):
+   (`match`: Selection,
+    before:  Optional[Text],
+    after:   Optional[Text],
+    replace: Optional[Text]):
 
   def apply(text: Text): Text = `match`.findIn(text).lay(text): (start, end) =>
     val replacement = t"${before.or(t"")}${replace.or(text.slice(Ordinal.zerary(start) ~ Ordinal.natural(end)))}${after.or(t"")}"
     t"${text.s.substring(0, start).nn}$replacement${text.s.substring(end).nn}"
 
 case class Fragment
-    (syntax:    Text,
-     highlight: List[Highlight],
-     error:     List[Highlight],
-     caution:   List[Highlight],
-     transform: Optional[Transform])
+   (syntax:    Text,
+    highlight: List[Highlight],
+    error:     List[Highlight],
+    caution:   List[Highlight],
+    transform: Optional[Transform])
 
 case class Selection(start: Text, end: Optional[Text]):
   def findIn(text: Text): Optional[(Int, Int)] =
@@ -96,9 +97,9 @@ def page(aside: Html[Flow], content: Html[Flow]*): HtmlDoc =
    (Head
      (Title(t"Soundness.dev"),
       Meta(charset = enc"UTF-8"),
-      Link(rel = Rel.Stylesheet, href = % / p"styles.css"),
-      Link(rel = Rel.Stylesheet, href = % / p"amok.css"),
-      Link(rel = Rel.Icon, href = % / p"images" / p"logo2.svg")),
+      Link(rel = Rel.Stylesheet, href = t"/styles.css"),
+      Link(rel = Rel.Stylesheet, href = t"/amok.css"),
+      Link(rel = Rel.Icon, href = t"/images/logo2.svg")),
     Body
      (Nav(Ul
        (Li(A(href = %)(t"home")),
@@ -111,7 +112,8 @@ def page(aside: Html[Flow], content: Html[Flow]*): HtmlDoc =
 val projects = Set
  (t"kaleidoscope", t"quantitative", t"dendrology", t"contingency", t"vacuous", t"iridescence",
   t"turbulence", t"symbolism", t"nettlesome", t"larceny", t"metamorphose", t"wisteria",
-  t"capricious", t"dissonance", t"escritoire", t"gossamer", t"abacist", t"ethereal")
+  t"capricious", t"dissonance", t"escritoire", t"gossamer", t"abacist", t"ethereal", t"exoskeleton",
+  t"profanity")
 
 object Slogan:
   private val cache: scm.HashMap[Text, Text] = scm.HashMap()
@@ -146,8 +148,9 @@ object Data:
   lazy val repos: Map[Text, Repo] =
     tend:
       case _: HttpError => InitError(m"Could not access GitHub")
-    .within:
-      GitHub.repos(t"propensive").indexBy(_.name)
+
+    . within:
+        GitHub.repos(t"propensive").indexBy(_.name)
 
   def apply(project: Text): HtmlDoc raises HttpError raises MarkdownError =
     val intro = url"https://raw.githubusercontent.com/propensive/$project/main/doc/intro.md"
@@ -165,7 +168,7 @@ object Data:
 
       val published = latest.lay(Nil): tag =>
         modules.flatMap: module =>
-          val size = MavenCentral.binarySize(t"dev.soundness", t"$project-$module", tag).or(ByteSize(0))
+          val size = MavenCentral.binarySize(t"dev.soundness", t"$project-$module", tag).or(Memory(0))
           List
            (H3.module(t"$project-$module"),
             H4(t"Maven"),
@@ -214,7 +217,7 @@ object Data:
 
 
 
-def handle(using HttpRequest): HttpResponse[?] =
+def handle(using HttpRequest): HttpResponse =
   mend:
     case MarkdownError(detail) =>
       HttpResponse(page(Div, Article(H2(t"Error"), P(t"The source contained bad markdown content."))))
@@ -226,28 +229,26 @@ def handle(using HttpRequest): HttpResponse[?] =
       HttpResponse(page(Div, Article(H2(t"Path Not Found"), P(t"The path was not found"))))
 
     case PathError(path, reason) =>
-      HttpResponse(page(Div, Article(H2(t"Path Error"), P(t"$path is not valid because $reason"))))
+      val explanation = t"$path is not valid${reason.let { reason => t" because $reason" }.or(t"")}"
+      HttpResponse(page(Div, Article(H2(t"Path Error"), P(explanation))))
 
-    case error@HttpError(_, _) =>
-      HttpResponse(page(Div, Article(H2(t"Error"), P(t"Could not download the remote page"))))
+    case HttpError(url, method, status) =>
+      HttpResponse(page(Div, Article(H2(t"Error ($status)"), P(t"Could not download the remote page"))))
 
-  .within:
-     request.path match
-      case %                 => HttpResponse(home)
-      case % / p"styles.css" => HttpResponse(Classpath / p"styles.css")
-      case % / p"amok.css"   => HttpResponse(Classpath / p"amok" / p"styles.css")
-      case % / p"images" / Name(image) =>
-        val resource = Classpath / p"images" / Name(image)
+  . within:
+      request.path match
+        case t"/"           => HttpResponse(home)
+        case t"/styles.css" => HttpResponse(Classpath / n"styles.css")
+        case t"/amok.css"   => HttpResponse(Classpath / n"amok" / n"styles.css")
+        case r"/images/$image(.*)" =>
+          val resource = Classpath / n"images" / Name(image)
 
-        if resource.exists() then HttpResponse(resource) else
-          HttpResponse
-           (NotFound(page(Div, Article(H2(t"Not Found"), P(t"The image was not found.")))))
+          if resource.exists() then HttpResponse(resource) else
+            HttpResponse
+             (NotFound(page(Div, Article(H2(t"Not Found"), P(t"The image was not found.")))))
 
-      case % / p"sample" =>
-        HttpResponse(page(Div, Article(Markdown.parse(Classpath / p"example.md").html)))
+        case r"/$project(.*)" if projects.contains(project) =>
+          HttpResponse(Data(project))
 
-      case % / Name(project) if projects.contains(project) =>
-        HttpResponse(Data(project))
-
-      case _ =>
-        HttpResponse(page(Div, Article(H2(t"Not Found"), P(t"This page does not exist."))))
+        case _ =>
+          HttpResponse(page(Div, Article(H2(t"Not Found"), P(t"This page does not exist."))))

@@ -1,12 +1,12 @@
 package dev.soundness
 
 import soundness.*
-import jacinta.*
 import merino.*
-import telekinesis.{HttpRequest as _, HttpResponse as _, *}
 
 import environments.virtualMachine
 import dynamicJsonAccess.enabled
+import strategies.throwUnsafely
+import errorDiagnostics.stackTraces
 
 object GitHub:
   val base = url"https://api.github.com"
@@ -15,7 +15,8 @@ object GitHub:
     tend:
       case EnvironmentError(variable) =>
         InitError(m"Could not read the environment variable $variable")
-    .within(Environment.githubToken[Text])
+
+    . within(Environment.githubToken[Text])
 
   val headers: List[RequestHeader.Value] = List
    (RequestHeader.Authorization(Auth.Bearer(token)),
@@ -25,8 +26,12 @@ object GitHub:
   def repos(login: Text): List[Repo] raises HttpError =
     def recur(page: Int = 1, all: List[List[Repo]] = Nil): List[List[Repo]] =
       val url = unsafely(Url.parse(t"https://api.github.com/users/$login/repos?per_page=100&page=$page"))
-      val repos = url.get(headers*).as[Json].as[List[Repo]]
-      if repos.isEmpty then all else recur(page + 1, repos :: all)
+
+      safely:
+        val repos = url.get(headers*).as[Json].as[List[Repo]]
+        if repos.isEmpty then all else recur(page + 1, repos :: all)
+
+      . or(Nil)
 
     recur().flatten
 
